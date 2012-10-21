@@ -1428,7 +1428,16 @@ self =>
               }
             }
           } else if (in.token == MATCH) {
-            t = atPos(t.pos.startOrPoint, in.skipToken())(Match(stripParens(t), inBracesOrNil(caseClauses())))
+            val pos = in.skipToken()
+            if (in.token == LBRACE)
+              t = atPos(t.pos.startOrPoint, pos)(Match(stripParens(t), inBracesOrNil(caseClauses())))
+            else {
+              t = atPos(t.pos.startOrPoint, pos)(
+                Match(stripParens(t), List(
+                  makeCaseDef(pattern(), guard(), Literal(Constant(true))),
+                  makeCaseDef(Ident(nme.WILDCARD), EmptyTree, Literal(Constant(false)))
+                )))
+            }
           }
           // in order to allow anonymous functions as statements (as opposed to expressions) inside
           // templates, we have to disambiguate them from self type declarations - bug #1565
