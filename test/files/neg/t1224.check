@@ -1,4 +1,16 @@
-t1224.scala:4: error: lower bound C[A.this.T] does not conform to upper bound C[C[A.this.T]]
- type T >: C[T] <: C[C[T]]
-      ^
-one error found
+t1224.scala:10: error: lower bound q1.p1.C[A2.this.T] does not conform to upper bound q1.p1.C[q1.p1.C[A2.this.T]]
+     type T >: C[T] <: C[C[T]]
+          ^
+t1224.scala:14: error: lower bound q1.p1.C[q1.p1.C[A3.this.T]] does not conform to upper bound q1.p1.C[A3.this.T]
+     type T >: C[C[T]] <: C[T]
+          ^
+t1224.scala:30: error: lower bound q1.p2.C[A2.this.T] does not conform to upper bound q1.p2.C[q1.p2.C[A2.this.T]]
+     type T >: C[T] <: C[C[T]]
+          ^
+t1224.scala:50: error: lower bound q1.p3.C[A2.this.T] does not conform to upper bound q1.p3.C[q1.p3.C[A2.this.T]]
+     type T >: C[T] <: C[C[T]]
+          ^
+t1224.scala:54: error: lower bound q1.p3.C[q1.p3.C[A3.this.T]] does not conform to upper bound q1.p3.C[A3.this.T]
+     type T >: C[C[T]] <: C[T]
+          ^
+5 errors found

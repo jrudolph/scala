@@ -705,7 +705,7 @@ trait Namers extends MethodSynthesis {
     def findCyclicalLowerBound(tp: Type): Symbol = {
       tp match {
         case TypeBounds(lo, _) =>
-          // check that lower bound is not an F-bound
+          // check that lower bound is not an F-bound by forcing cycles
           // but carefully: class Foo[T <: Bar[_ >: T]] should be allowed
           for (tp1 @ TypeRef(_, sym, _) <- lo) {
             if (settings.breakCycles) {
