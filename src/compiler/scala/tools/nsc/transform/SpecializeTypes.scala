@@ -852,7 +852,11 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
           debuglog("%s expands to %s in %s".format(sym, specMember.name.decode, pp(env)))
           info(specMember) = NormalizedMember(sym)
           newOverload(sym, specMember, env)
-          owner.info.decls.enter(specMember)
+          // if this is a class, we insert the normalized member in scope,
+          // if this is a method, there's no attached scope for it (EmptyScope)
+          val decls = owner.info.decls
+          if (decls != EmptyScope)
+            decls.enter(specMember)
           specMember
         }
       }
@@ -1263,7 +1267,35 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
     }
 
     protected override def newBodyDuplicator(context: Context) = new BodyDuplicator(context)
+  }
 
+  /** Introduced to fix SI-7343: Phase ordering problem between Duplicators and Specialization.
+   * brief explanation: specialization rewires class parents during info transformation, and
+   * the new info then guides the tree changes. But if a symbol is created during duplication,
+   * which runs after specialization, its info is not visited and thus the corresponding tree
+   * is not specialized. One manifestation is the following:
+   * ```
+   * object Test {
+   *   class Parent[@specialized(Int) T]
+   *
+   *   def spec_method[@specialized(Int) T](t: T, expectedXSuper: String) = {
+   *     class X extends Parent[T]()
+   *     // even in the specialized variant, the local X class
+   *     // doesn't extend Parent$mcI$sp, since its symbol has
+   *     // been created after specialization and was not seen
+   *     // by specialzation's info transformer.
+   *     ...
+   *   }
+   * }
+   * ```
+   * We fix this by forcing duplication to take place before specialization.
+   *
+   * Note: The constructors phase (which also uses duplication) comes after erasure and uses the
+   * post-erasure typer => we must protect it from the beforeSpecialization phase shifting.
+   */
+  class SpecializationDuplicator(casts: Map[Symbol, Type]) extends Duplicator(casts) {
+    override def retyped(context: Context, tree: Tree, oldThis: Symbol, newThis: Symbol, env: scala.collection.Map[Symbol, Type]): Tree =
+      enteringSpecialize(super.retyped(context, tree, oldThis, newThis, env))
   }
 
   /** A tree symbol substituter that substitutes on type skolems.
@@ -1445,6 +1477,32 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
         }
       }
 
+      /** Computes residual type parameters after rewiring, like "String" in the following example:
+       *  ```
+       *    def specMe[@specialized T, U](t: T, u: U) = ???
+       *    specMe[Int, String](1, "2") => specMe$mIc$sp[String](1, "2")
+       *  ```
+       */
+      def computeResidualTypeVars(baseTree: Tree, specMember: Symbol, specTree: Tree, baseTargs: List[Tree], env: TypeEnv): Tree = {
+        val residualTargs = symbol.info.typeParams zip baseTargs collect {
+          case (tvar, targ) if !env.contains(tvar) || !isPrimitiveValueClass(env(tvar).typeSymbol) => targ
+        }
+        // See SI-5583.  Don't know why it happens now if it didn't before.
+        if (specMember.info.typeParams.isEmpty && residualTargs.nonEmpty) {
+          devWarning("Type args to be applied, but symbol says no parameters: " + ((specMember.defString, residualTargs)))
+          baseTree
+        }
+        else {
+          ifDebug(assert(residualTargs.length == specMember.info.typeParams.length,
+            "residual: %s, tparams: %s, env: %s".format(residualTargs, specMember.info.typeParams, env))
+          )
+
+          val tree1 = gen.mkTypeApply(specTree, residualTargs)
+          debuglog("rewrote " + tree + " to " + tree1)
+          localTyper.typedOperator(atPos(tree.pos)(tree1)) // being polymorphic, it must be a method
+        }
+      }
+
       curTree = tree
       tree match {
         case Apply(Select(New(tpt), nme.CONSTRUCTOR), args) =>
@@ -1470,12 +1528,16 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
           }
           transformSuperApply
 
+        // This rewires calls to specialized methods defined in a class (which have a receiver)
+        // class C {
+        //   def foo[@specialized T](t: T): T = t
+        //   C.this.foo(3) // TypeApply(Select(This(C), foo), List(Int)) => C.this.foo$mIc$sp(3)
+        // }
         case TypeApply(sel @ Select(qual, name), targs)
-                if (!specializedTypeVars(symbol.info).isEmpty && name != nme.CONSTRUCTOR) =>
-          def transformTypeApply = {
+                if (specializedTypeVars(symbol.info).nonEmpty && name != nme.CONSTRUCTOR) =>
           debuglog("checking typeapp for rerouting: " + tree + " with sym.tpe: " + symbol.tpe + " tree.tpe: " + tree.tpe)
           val qual1 = transform(qual)
-          // log(">>> TypeApply: " + tree + ", qual1: " + qual1)
+          log(">>> TypeApply: " + tree + ", qual1: " + qual1)
           specSym(qual1) match {
             case NoSymbol =>
               // See pos/exponential-spec.scala - can't call transform on the whole tree again.
@@ -1485,26 +1547,23 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
               ifDebug(assert(symbol.info.typeParams.length == targs.length, symbol.info.typeParams + " / " + targs))
 
               val env = typeEnv(specMember)
-              val residualTargs = symbol.info.typeParams zip targs collect {
-                case (tvar, targ) if !env.contains(tvar) || !isPrimitiveValueClass(env(tvar).typeSymbol) => targ
-              }
-              // See SI-5583.  Don't know why it happens now if it didn't before.
-              if (specMember.info.typeParams.isEmpty && residualTargs.nonEmpty) {
-                devWarning("Type args to be applied, but symbol says no parameters: " + ((specMember.defString, residualTargs)))
-                localTyper.typed(sel)
-              }
-              else {
-                ifDebug(assert(residualTargs.length == specMember.info.typeParams.length,
-                  "residual: %s, tparams: %s, env: %s".format(residualTargs, specMember.info.typeParams, env))
-                )
+              computeResidualTypeVars(tree, specMember, gen.mkAttributedSelect(qual1, specMember), targs, env)
+          }
 
-                val tree1 = gen.mkTypeApply(Select(qual1, specMember), residualTargs)
-                debuglog("rewrote " + tree + " to " + tree1)
-                localTyper.typedOperator(atPos(tree.pos)(tree1)) // being polymorphic, it must be a method
-              }
+        // This rewires calls to specialized methods defined in the local scope. For example:
+        // def outerMethod = {
+        //   def foo[@specialized T](t: T): T = t
+        //   foo(3) // TypeApply(Ident(foo), List(Int)) => foo$mIc$sp(3)
+        // }
+        case TypeApply(sel @ Ident(name), targs) if name != nme.CONSTRUCTOR =>
+          val env = unify(symbol.tpe, tree.tpe, emptyEnv, false)
+          if (env.isEmpty) super.transform(tree)
+          else {
+            overloads(symbol) find (_ matchesEnv env) match {
+              case Some(Overload(specMember, _)) => computeResidualTypeVars(tree, specMember, Ident(specMember), targs, env)
+              case _ => super.transform(tree)
+            }
           }
-          }
-          transformTypeApply
 
         case Select(Super(_, _), _) if illegalSpecializedInheritance(currentClass) =>
           val pos = tree.pos
@@ -1621,7 +1680,11 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
               localTyper.typed(deriveDefDef(tree)(rhs => rhs))
           }
           }
-          transformDefDef
+          expandInnerNormalizedMembers(transformDefDef)
+
+        case ddef @ DefDef(_, _, _, _, _, _) =>
+          val tree1 = expandInnerNormalizedMembers(tree)
+          super.transform(tree1)
 
         case ValDef(_, _, _, _) if symbol.hasFlag(SPECIALIZED) && !symbol.isParamAccessor =>
           def transformValDef = {
@@ -1629,7 +1692,7 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
           val tree1 = deriveValDef(tree)(_ => body(symbol.alias).duplicate)
           debuglog("now typing: " + tree1 + " in " + tree.symbol.owner.fullName)
 
-          val d = new Duplicator(emptyEnv)
+          val d = new SpecializationDuplicator(emptyEnv)
           val newValDef = d.retyped(
             localTyper.context1.asInstanceOf[d.Context],
             tree1,
@@ -1645,6 +1708,39 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
       }
     }
 
+    /**
+     * This performs method specialization inside a scope other than a {class, trait, object}: could be another method
+     * or a value. This specialization is much simpler, since there is no need to record the new members in the class
+     * signature, their signatures are only visible locally. It works according to the usual logic:
+     *  - we use normalizeMember to create the specialized symbols
+     *  - we leave DefDef stubs in the tree that are later filled in by tree duplication and adaptation
+     * @see duplicateBody
+     */
+    private def expandInnerNormalizedMembers(tree: Tree) = tree match {
+      case ddef @ DefDef(_, _, _, vparams :: Nil, _, rhs)
+           if ddef.symbol.owner.isMethod &&
+           specializedTypeVars(ddef.symbol.info).nonEmpty &&
+           !ddef.symbol.hasFlag(SPECIALIZED) =>
+
+        val sym = ddef.symbol
+        val owner = sym.owner
+        val norm = normalizeMember(owner, sym, emptyEnv)
+
+        if (norm.length > 1) {
+          // record the body for duplication
+          body(sym) = rhs
+          parameters(sym) = vparams.map(_.symbol)
+          // to avoid revisiting the member, we can set the SPECIALIZED
+          // flag. nobody has to see this anyway :)
+          sym.setFlag(SPECIALIZED)
+          // create empty bodies for specializations
+          localTyper.typed(Block(norm.tail.map(sym => DefDef(sym, { vparamss => EmptyTree })), ddef))
+        } else
+          tree
+      case _ =>
+        tree
+    }
+
     /** Duplicate the body of the given method `tree` to the new symbol `source`.
      *
      *  Knowing that the method can be invoked only in the `castmap` type environment,
@@ -1655,7 +1751,7 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
       val symbol = tree.symbol
       val meth   = addBody(tree, source)
 
-      val d = new Duplicator(castmap)
+      val d = new SpecializationDuplicator(castmap)
       debuglog("-->d DUPLICATING: " + meth)
       d.retyped(
         localTyper.context1.asInstanceOf[d.Context],

@@ -1425,8 +1425,8 @@ trait Typers extends Adaptations with Tags with TypersTracking {
               implRestriction(tree, "nested object")
             //see https://issues.scala-lang.org/browse/SI-6444
             //see https://issues.scala-lang.org/browse/SI-6463
-            case _: ClassDef =>
-              implRestriction(tree, "nested class")
+            case cd: ClassDef if !cd.symbol.isAnonymousClass => // Don't warn about partial functions, etc. SI-7571
+              implRestriction(tree, "nested class") // avoiding Type Tests that might check the $outer pointer.
             case Select(sup @ Super(qual, mix), selector) if selector != nme.CONSTRUCTOR && qual.symbol == clazz && mix != tpnme.EMPTY =>
               //see https://issues.scala-lang.org/browse/SI-6483
               implRestriction(sup, "qualified super reference")
@@ -1567,9 +1567,9 @@ trait Typers extends Adaptations with Tags with TypersTracking {
         }
         typedType(decodedtpt)
       } else {
-        var supertpt = typedTypeConstructor(decodedtpt)
+        val supertpt = typedTypeConstructor(decodedtpt)
         val supertparams = if (supertpt.hasSymbolField) supertpt.symbol.typeParams else Nil
-        if (supertparams.nonEmpty) {
+        def inferParentTypeArgs: Tree = {
           typedPrimaryConstrBody(templ) {
             val supertpe = PolyType(supertparams, appliedType(supertpt.tpe, supertparams map (_.tpeHK)))
             val supercall = New(supertpe, mmap(argss)(_.duplicate))
@@ -1577,14 +1577,17 @@ trait Typers extends Adaptations with Tags with TypersTracking {
             ctor setType supertpe // this is an essential hack, otherwise it will occasionally fail to typecheck
             atPos(supertpt.pos.focus)(supercall)
           } match {
-            case EmptyTree => MissingTypeArgumentsParentTpeError(supertpt)
-            case tpt => supertpt = TypeTree(tpt.tpe) setPos supertpt.pos  // SI-7224: don't .focus positions of the TypeTree of a parent that exists in source
+            case EmptyTree => MissingTypeArgumentsParentTpeError(supertpt); supertpt
+            case tpt       => TypeTree(tpt.tpe) setPos supertpt.pos  // SI-7224: don't .focus positions of the TypeTree of a parent that exists in source
           }
         }
+
+        val supertptWithTargs = if (supertparams.isEmpty || context.unit.isJava) supertpt else inferParentTypeArgs
+
         // this is the place where we tell the typer what argss should be used for the super call
         // if argss are nullary or empty, then (see the docs for `typedPrimaryConstrBody`)
         // the super call dummy is already good enough, so we don't need to do anything
-        if (argssAreTrivial) supertpt else supertpt updateAttachment SuperArgsAttachment(argss)
+        if (argssAreTrivial) supertptWithTargs else supertptWithTargs updateAttachment SuperArgsAttachment(argss)
       }
     }
 
@@ -5092,7 +5095,7 @@ trait Typers extends Adaptations with Tags with TypersTracking {
             if (mode.inPatternMode) {
               val uncheckedTypeExtractor = extractorForUncheckedType(tpt.pos, tptTyped.tpe)
               // make fully defined to avoid bounded wildcard types that may be in pt from calling dropExistential (SI-2038)
-              val ptDefined = ensureFullyDefined(pt)
+              val ptDefined = ensureFullyDefined(pt) // FIXME this is probably redundant now that we don't dropExistenial in pattern mode.
               val ownType = inferTypedPattern(tptTyped, tptTyped.tpe, ptDefined, canRemedy = uncheckedTypeExtractor.nonEmpty)
               treeTyped setType ownType
 
@@ -5330,7 +5333,11 @@ trait Typers extends Adaptations with Tags with TypersTracking {
         }
         val alreadyTyped = tree.tpe ne null
         val shouldPrint = !alreadyTyped && !phase.erasedTypes
-        val tree1: Tree = if (alreadyTyped) tree else typed1(tree, mode, dropExistential(ptPlugins))
+        val ptWild = if (mode.inPatternMode)
+          ptPlugins // SI-5022 don't widen pt for patterns as types flow from it to the case body.
+        else
+          dropExistential(ptPlugins) // FIXME: document why this is done.
+        val tree1: Tree = if (alreadyTyped) tree else typed1(tree, mode, ptWild)
         if (shouldPrint)
           typingStack.showTyped(tree1)
 

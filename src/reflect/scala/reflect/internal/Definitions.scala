@@ -16,7 +16,7 @@ import scala.reflect.api.{Universe => ApiUniverse}
 trait Definitions extends api.StandardDefinitions {
   self: SymbolTable =>
 
-  import rootMirror.{getModule, getPackage, getClassByName, getRequiredClass, getRequiredModule, getClassIfDefined, getModuleIfDefined, getPackageObject, getPackageObjectIfDefined, requiredClass, requiredModule}
+  import rootMirror.{getModule, getPackage, getClassByName, getRequiredClass, getRequiredModule, getClassIfDefined, getModuleIfDefined, getPackageObject, getPackageIfDefined, getPackageObjectIfDefined, requiredClass, requiredModule}
 
   object definitions extends DefinitionsClass
 
@@ -471,6 +471,10 @@ trait Definitions extends api.StandardDefinitions {
       def methodCache_find          = getMemberMethod(MethodCacheClass, nme.find_)
       def methodCache_add           = getMemberMethod(MethodCacheClass, nme.add_)
 
+    // XML
+    lazy val ScalaXmlTopScope = getModuleIfDefined("scala.xml.TopScope")
+    lazy val ScalaXmlPackage  = getPackageIfDefined("scala.xml")
+
     // scala.reflect
     lazy val ReflectPackage              = requiredModule[scala.reflect.`package`.type]
     lazy val ReflectApiPackage           = getPackageObjectIfDefined("scala.reflect.api") // defined in scala-reflect.jar, so we need to be careful
@@ -857,6 +861,12 @@ trait Definitions extends api.StandardDefinitions {
     lazy val BoxedNumberClass       = getClassByName(sn.BoxedNumber)
     lazy val BoxedCharacterClass    = getClassByName(sn.BoxedCharacter)
     lazy val BoxedBooleanClass      = getClassByName(sn.BoxedBoolean)
+    lazy val BoxedByteClass         = requiredClass[java.lang.Byte]
+    lazy val BoxedShortClass        = requiredClass[java.lang.Short]
+    lazy val BoxedIntClass          = requiredClass[java.lang.Integer]
+    lazy val BoxedLongClass         = requiredClass[java.lang.Long]
+    lazy val BoxedFloatClass        = requiredClass[java.lang.Float]
+    lazy val BoxedDoubleClass       = requiredClass[java.lang.Double]
 
     lazy val Boxes_isNumberOrBool  = getDecl(BoxesRunTimeClass, nme.isBoxedNumberOrBoolean)
     lazy val Boxes_isNumber        = getDecl(BoxesRunTimeClass, nme.isBoxedNumber)
