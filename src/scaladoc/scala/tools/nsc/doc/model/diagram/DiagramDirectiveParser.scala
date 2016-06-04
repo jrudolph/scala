@@ -177,10 +177,19 @@ trait DiagramDirectiveParser {
 
       def warning(message: String) = {
         // we need the position from the package object (well, ideally its comment, but yeah ...)
-        val sym = if (template.sym.hasPackageFlag) template.sym.packageObject else template.sym
+        val sym = if (template.sym.hasPackageFlag) packageObjectOfSym(template.sym) else template.sym
         assert((sym != global.NoSymbol) || (sym == global.rootMirror.RootPackage))
         global.reporter.warning(sym.pos, message)
       }
+
+      /** The package object symbol corresponding to this package or package class symbol, or NoSymbol otherwise */
+      def packageObjectOfSym(sym: global.Symbol): global.Symbol =
+        if (sym.isPackageClass) packageObjectOfTpe(sym.tpe)
+        else if (sym.isPackage) packageObjectOfSym(sym.moduleClass)
+        else global.NoSymbol
+
+      def packageObjectOfTpe(tpe: global.Type): global.Symbol =
+        tpe.member(global.nme.PACKAGE)
 
       def preparePattern(className: String) =
         "^" + className.stripPrefix("\"").stripSuffix("\"").replaceAll("\\.", "\\\\.").replaceAll("\\*", ".*") + "$"
