@@ -8,20 +8,18 @@
 
 package scala.concurrent.impl
 
-import scala.concurrent.{ ExecutionContext, CanAwait, OnCompleteRunnable, TimeoutException, ExecutionException }
+import scala.concurrent.{ CanAwait, ExecutionContext, ExecutionException, Future, OnCompleteRunnable, TimeoutException }
 import scala.concurrent.Future.InternalCallbackExecutor
 import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 import scala.util.{ Try, Success, Failure }
-
 import java.util.concurrent.locks.AbstractQueuedSynchronizer
 import java.util.concurrent.atomic.AtomicReference
 
 private[concurrent] trait Promise[T] extends scala.concurrent.Promise[T] with scala.concurrent.Future[T] {
   def future: this.type = this
 
-  import scala.concurrent.Future
   import scala.concurrent.impl.Promise.DefaultPromise
 
   override def transform[S](f: Try[T] => Try[S])(implicit executor: ExecutionContext): Future[S] = {
@@ -49,9 +47,17 @@ private[concurrent] trait Promise[T] extends scala.concurrent.Promise[T] with sc
   }
 }
 
-/* Precondition: `executor` is prepared, i.e., `executor` has been returned from invocation of `prepare` on some other `ExecutionContext`.
+/** Common super trait for CallbackRunnable and FilteredCallbackRunnable */
+private sealed abstract class Callback[T] {
+  def executeWithValue(v: Try[T]): Unit
+}
+
+/**
+ * A callback that runs the given onComplete function on the given executor.
+ *
+ * Precondition: `executor` is prepared, i.e., `executor` has been returned from invocation of `prepare` on some other `ExecutionContext`.
  */
-private final class CallbackRunnable[T](val executor: ExecutionContext, val onComplete: Try[T] => Any) extends Runnable with OnCompleteRunnable {
+private final class DispatchingCallback[T](val executor: ExecutionContext, val onComplete: Try[T] => Any) extends Callback[T] with OnCompleteRunnable with Runnable {
   // must be filled in before running it
   var value: Try[T] = null
 
@@ -66,6 +72,26 @@ private final class CallbackRunnable[T](val executor: ExecutionContext, val onCo
     // Note that we cannot prepare the ExecutionContext at this point, since we might
     // already be running on a different thread!
     try executor.execute(this) catch { case NonFatal(t) => executor reportFailure t }
+  }
+}
+
+/**
+ * A callback that runs the firstStage on the thread that calls the callback, allowing the firstStage to dispatch the
+ * secondStage to run on the given executor.
+ *
+ * Precondition: `executor` is prepared, i.e., `executor` has been returned from invocation of `prepare` on some other `ExecutionContext`.
+ */
+private final class MultiStageCallback[T, U](executor: ExecutionContext, firstStage: (Try[T], U => Unit) => Unit, secondStage: U => Unit) extends Callback[T] with OnCompleteRunnable with Runnable {
+  private[this] var _u: U = _
+
+  final def run(): Unit = try secondStage(_u) catch { case NonFatal(e) => executor reportFailure e }
+  final def executeWithValue(v: Try[T]): Unit =
+    try firstStage(v, dispatchSecondStage) catch { case NonFatal(e) => executor reportFailure e }
+
+  private def dispatchSecondStage(u: U): Unit = {
+    // TODO: check that we only run once?
+    _u = u
+    executor.execute(this)
   }
 }
 
@@ -289,10 +315,10 @@ private[concurrent] object Promise {
      *  listeners, or `null` if it is already completed.
      */
     @tailrec
-    private def tryCompleteAndGetListeners(v: Try[T]): List[CallbackRunnable[T]] = {
+    private def tryCompleteAndGetListeners(v: Try[T]): List[Callback[T]] = {
       get() match {
         case raw: List[_] =>
-          val cur = raw.asInstanceOf[List[CallbackRunnable[T]]]
+          val cur = raw.asInstanceOf[List[Callback[T]]]
           if (compareAndSet(cur, v)) cur else tryCompleteAndGetListeners(v)
         case dp: DefaultPromise[_] => compressedRoot(dp).tryCompleteAndGetListeners(v)
         case _ => null
@@ -300,14 +326,50 @@ private[concurrent] object Promise {
     }
 
     final def onComplete[U](func: Try[T] => U)(implicit executor: ExecutionContext): Unit =
-      dispatchOrAddCallback(new CallbackRunnable[T](executor.prepare(), func))
+      dispatchOrAddCallback(new DispatchingCallback[T](executor.prepare(), func))
+
+    // optimized implementations for `onFailure` like methods that avoid scheduling a Callable in the happy case
+    override def onFailure[U](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Unit =
+      dispatchOrAddMultiStageCallback[Throwable](executor,
+        (v, dispatchSecondStage) =>
+          v match {
+            case Success(_) => // nothing to do
+            case Failure(ex) => dispatchSecondStage(ex)
+          },
+        exception => if (pf isDefinedAt exception) pf(exception)
+      )
+
+    override def recover[U >: T](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Future[U] =
+      recoverWith {
+        case exception if pf.isDefinedAt(exception) => Future.successful(pf(exception))
+      }
+
+    override def recoverWith[U >: T](pf: PartialFunction[Throwable, Future[U]])(implicit executor: ExecutionContext): Future[U] = {
+      val p = new DefaultPromise[U]()
+
+      dispatchOrAddMultiStageCallback[Throwable](executor,
+        (v, dispatchSecondStage) =>
+            v match {
+              case Success(t) => p.success(t)
+              case Failure(ex) => dispatchSecondStage(ex)
+            },
+        exception =>
+            try if (pf isDefinedAt exception) p.completeWith(pf(exception)) else p.failure(exception)
+            catch { case NonFatal(e) => p.failure(e) }
+      )
+
+      p.future
+    }
+
+    private def dispatchOrAddMultiStageCallback[U](executor: ExecutionContext, firstStage: (Try[T], U => Unit) => Unit, secondStage: U => Unit): Unit =
+      dispatchOrAddCallback(new MultiStageCallback[T, U](executor.prepare(), firstStage, secondStage))
 
     /** Tries to add the callback, if already completed, it dispatches the callback to be executed.
      *  Used by `onComplete()` to add callbacks to a promise and by `link()` to transfer callbacks
      *  to the root promise when linking two promises together.
      */
     @tailrec
-    private def dispatchOrAddCallback(runnable: CallbackRunnable[T]): Unit = {
+    private def dispatchOrAddCallback(runnable: Callback[T]): Unit = {
       get() match {
         case r: Try[_]          => runnable.executeWithValue(r.asInstanceOf[Try[T]])
         case dp: DefaultPromise[_] => compressedRoot(dp).dispatchOrAddCallback(runnable)
@@ -340,7 +402,7 @@ private[concurrent] object Promise {
           compressedRoot(dp).link(target)
         case listeners: List[_] if compareAndSet(listeners, target) =>
           if (listeners.nonEmpty)
-            listeners.asInstanceOf[List[CallbackRunnable[T]]].foreach(target.dispatchOrAddCallback(_))
+            listeners.asInstanceOf[List[Callback[T]]].foreach(target.dispatchOrAddCallback(_))
         case _ =>
           link(target)
       }
@@ -365,7 +427,7 @@ private[concurrent] object Promise {
       override def tryComplete(value: Try[T]): Boolean = false
 
       override def onComplete[U](func: Try[T] => U)(implicit executor: ExecutionContext): Unit =
-        (new CallbackRunnable(executor.prepare(), func)).executeWithValue(result)
+        (new DispatchingCallback[T](executor.prepare(), func)).executeWithValue(result)
 
       override def ready(atMost: Duration)(implicit permit: CanAwait): this.type = this
 
