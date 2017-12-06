@@ -8,15 +8,16 @@
 
 package scala.concurrent.impl
 
-import scala.concurrent.{ ExecutionContext, CanAwait, OnCompleteRunnable, TimeoutException, ExecutionException }
+import scala.concurrent.{CanAwait, ExecutionContext, ExecutionException, OnCompleteRunnable, TimeoutException}
 import scala.concurrent.Future.InternalCallbackExecutor
-import scala.concurrent.duration.{ Duration, FiniteDuration }
+import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
-import scala.util.{ Try, Success, Failure }
-
+import scala.util.{Failure, Success, Try}
 import java.util.concurrent.locks.AbstractQueuedSynchronizer
 import java.util.concurrent.atomic.AtomicReference
+
+import scala.concurrent.Future
 
 private[concurrent] trait Promise[T] extends scala.concurrent.Promise[T] with scala.concurrent.Future[T] {
   def future: this.type = this
@@ -49,9 +50,14 @@ private[concurrent] trait Promise[T] extends scala.concurrent.Promise[T] with sc
   }
 }
 
+/** Common super trait for CallbackRunnable and FilteredCallbackRunnable */
+private sealed trait RunnableWithExecuteWithValue[T] {
+  def executeWithValue(v: Try[T]): Unit
+}
+
 /* Precondition: `executor` is prepared, i.e., `executor` has been returned from invocation of `prepare` on some other `ExecutionContext`.
  */
-private final class CallbackRunnable[T](val executor: ExecutionContext, val onComplete: Try[T] => Any) extends Runnable with OnCompleteRunnable {
+private final class CallbackRunnable[T](val executor: ExecutionContext, val onComplete: Try[T] => Any) extends Runnable with OnCompleteRunnable with RunnableWithExecuteWithValue[T] {
   // must be filled in before running it
   var value: Try[T] = null
 
@@ -67,6 +73,40 @@ private final class CallbackRunnable[T](val executor: ExecutionContext, val onCo
     // already be running on a different thread!
     try executor.execute(this) catch { case NonFatal(t) => executor reportFailure t }
   }
+}
+
+/**
+ * A special cased callback runnable that runs the filter directly and then only dispatches the userCode if the filter succeeded.
+ */
+private final class FilteredCallbackRunnable[T, U ](
+  val executor: ExecutionContext,
+  val filter: PartialFunction[Try[T], U],
+  val userCode: U => Any
+) extends Runnable with OnCompleteRunnable with RunnableWithExecuteWithValue[T] {
+  // must be filled in before running it
+  var value: U = _
+
+  override def run() = {
+    require(value.asInstanceOf[AnyRef] ne null) // must set value to non-null before running!
+    try userCode(value) catch { case NonFatal(e) => executor reportFailure e }
+  }
+
+  def executeWithValue(v: Try[T]): Unit = {
+    require(value.asInstanceOf[AnyRef] eq null) // can't complete it twice
+
+    try {
+      val filtered = filter.applyOrElse(v, FilteredCallbackRunnable.default[T, U])
+      if (filtered != FilteredCallbackRunnable.FilteredOut) {
+        value = filtered
+        executor.execute(this)
+      }
+    } catch { case NonFatal(e) => executor reportFailure e }
+  }
+}
+private object FilteredCallbackRunnable {
+  val FilteredOut = new Object
+  def default[T, U]: Try[T] => U = defaultFunc.asInstanceOf[Try[T] => U]
+  val defaultFunc = (_: Try[_]) => FilteredCallbackRunnable.FilteredOut
 }
 
 private[concurrent] object Promise {
@@ -302,12 +342,74 @@ private[concurrent] object Promise {
     final def onComplete[U](func: Try[T] => U)(implicit executor: ExecutionContext): Unit =
       dispatchOrAddCallback(new CallbackRunnable[T](executor.prepare(), func))
 
+    // optimized implementations for `onFailure` like methods that avoid scheduling a Callable in the happy case
+    override def onFailure[U](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Unit =
+      dispatchWithFilter[Throwable](executor, { case Failure(ex) => ex }, pf.applyOrElse[Throwable, U](_, ex => ex.asInstanceOf[U]))
+
+    // these ones still need a better idea (like dispatchWithFilter) instead of having to copy and paste for every single new instance
+    override def recover[U >: T](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Future[U] = {
+      val p = new DefaultPromise[U]()
+
+      dispatchOrAddCallback(new Runnable with RunnableWithExecuteWithValue[T] {
+        executor.prepare()
+
+        var exception: Throwable = _
+        def run(): Unit =
+          try { if (pf isDefinedAt exception) p.success(pf(exception)) else this }
+          catch { case NonFatal(e) => p.failure(e) }
+
+        def executeWithValue(v: Try[T]): Unit =
+          try v match {
+          case Success(t) => p.success(t)
+          case Failure(ex) =>
+            exception = ex
+            executor.execute(this)
+        } catch { case NonFatal(e) => executor reportFailure e }
+      })
+
+      p.future
+    }
+
+    override def recoverWith[U >: T](pf: PartialFunction[Throwable, Future[U]])(implicit executor: ExecutionContext): Future[U] = {
+      val p = new DefaultPromise[U]()
+
+      dispatchOrAddCallback(new Runnable with RunnableWithExecuteWithValue[T] {
+        executor.prepare()
+
+        var exception: Throwable = _
+        def run(): Unit =
+          try { if (pf isDefinedAt exception) p.completeWith(pf(exception)) else this }
+          catch { case NonFatal(e) => p.failure(e) }
+
+        def executeWithValue(v: Try[T]): Unit =
+          try v match {
+            case Success(t) => p.success(t)
+            case Failure(ex) =>
+              exception = ex
+              executor.execute(this)
+          } catch { case NonFatal(e) => executor reportFailure e }
+      })
+
+      p.future
+    }
+
+    /* Works also for success case but not as important here
+    override def onSuccess[U](pf: PartialFunction[T, U])(implicit executor: ExecutionContext): Unit =
+      dispatchWithFilter[T](executor, { case Success(t) => t }, pf.applyOrElse(_, (t: T) => t.asInstanceOf[U]))
+
+    override def foreach[U](f: T => U)(implicit executor: ExecutionContext): Unit =
+      dispatchWithFilter[T](executor, { case Success(t) => t }, f)
+    */
+
+    private def dispatchWithFilter[U](executor: ExecutionContext, filter: PartialFunction[Try[T], U], userCode: U => Any): Unit =
+      dispatchOrAddCallback(new FilteredCallbackRunnable[T, U](executor.prepare(), filter, userCode))
+
     /** Tries to add the callback, if already completed, it dispatches the callback to be executed.
      *  Used by `onComplete()` to add callbacks to a promise and by `link()` to transfer callbacks
      *  to the root promise when linking two promises together.
      */
     @tailrec
-    private def dispatchOrAddCallback(runnable: CallbackRunnable[T]): Unit = {
+    private def dispatchOrAddCallback(runnable: RunnableWithExecuteWithValue[T]): Unit = {
       get() match {
         case r: Try[_]          => runnable.executeWithValue(r.asInstanceOf[Try[T]])
         case dp: DefaultPromise[_] => compressedRoot(dp).dispatchOrAddCallback(runnable)
