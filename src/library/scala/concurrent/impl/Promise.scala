@@ -54,7 +54,7 @@ private sealed abstract class Callback[T] {
 
 /* Precondition: `executor` is prepared, i.e., `executor` has been returned from invocation of `prepare` on some other `ExecutionContext`.
  */
-private final class CallbackRunnable[T](val executor: ExecutionContext, val onComplete: Try[T] => Any) extends Callback[T] with OnCompleteRunnable with Runnable {
+private final class DispatchingCallback[T](val executor: ExecutionContext, val onComplete: Try[T] => Any) extends Callback[T] with OnCompleteRunnable with Runnable {
   // must be filled in before running it
   var value: Try[T] = null
 
@@ -306,10 +306,10 @@ private[concurrent] object Promise {
      *  listeners, or `null` if it is already completed.
      */
     @tailrec
-    private def tryCompleteAndGetListeners(v: Try[T]): List[CallbackRunnable[T]] = {
+    private def tryCompleteAndGetListeners(v: Try[T]): List[Callback[T]] = {
       get() match {
         case raw: List[_] =>
-          val cur = raw.asInstanceOf[List[CallbackRunnable[T]]]
+          val cur = raw.asInstanceOf[List[Callback[T]]]
           if (compareAndSet(cur, v)) cur else tryCompleteAndGetListeners(v)
         case dp: DefaultPromise[_] => compressedRoot(dp).tryCompleteAndGetListeners(v)
         case _ => null
@@ -317,7 +317,7 @@ private[concurrent] object Promise {
     }
 
     final def onComplete[U](func: Try[T] => U)(implicit executor: ExecutionContext): Unit =
-      dispatchOrAddCallback(new CallbackRunnable[T](executor.prepare(), func))
+      dispatchOrAddCallback(new DispatchingCallback[T](executor.prepare(), func))
 
     // optimized implementations for `onFailure` like methods that avoid scheduling a Callable in the happy case
     override def onFailure[U](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Unit =
@@ -393,7 +393,7 @@ private[concurrent] object Promise {
           compressedRoot(dp).link(target)
         case listeners: List[_] if compareAndSet(listeners, target) =>
           if (listeners.nonEmpty)
-            listeners.asInstanceOf[List[CallbackRunnable[T]]].foreach(target.dispatchOrAddCallback(_))
+            listeners.asInstanceOf[List[Callback[T]]].foreach(target.dispatchOrAddCallback(_))
         case _ =>
           link(target)
       }
@@ -418,7 +418,7 @@ private[concurrent] object Promise {
       override def tryComplete(value: Try[T]): Boolean = false
 
       override def onComplete[U](func: Try[T] => U)(implicit executor: ExecutionContext): Unit =
-        (new CallbackRunnable(executor.prepare(), func)).executeWithValue(result)
+        (new DispatchingCallback[T](executor.prepare(), func)).executeWithValue(result)
 
       override def ready(atMost: Duration)(implicit permit: CanAwait): this.type = this
 
