@@ -52,7 +52,10 @@ private sealed abstract class Callback[T] {
   def executeWithValue(v: Try[T]): Unit
 }
 
-/* Precondition: `executor` is prepared, i.e., `executor` has been returned from invocation of `prepare` on some other `ExecutionContext`.
+/**
+ * A callback that runs the given onComplete function on the given executor.
+ *
+ * Precondition: `executor` is prepared, i.e., `executor` has been returned from invocation of `prepare` on some other `ExecutionContext`.
  */
 private final class DispatchingCallback[T](val executor: ExecutionContext, val onComplete: Try[T] => Any) extends Callback[T] with OnCompleteRunnable with Runnable {
   // must be filled in before running it
@@ -72,6 +75,12 @@ private final class DispatchingCallback[T](val executor: ExecutionContext, val o
   }
 }
 
+/**
+ * A callback that runs the firstStage on the thread that calls the callback, allowing the firstStage to dispatch the
+ * secondStage to run on the given executor.
+ *
+ * Precondition: `executor` is prepared, i.e., `executor` has been returned from invocation of `prepare` on some other `ExecutionContext`.
+ */
 private final class MultiStageCallback[T, U](executor: ExecutionContext, firstStage: (Try[T], U => Unit) => Unit, secondStage: U => Unit) extends Callback[T] with OnCompleteRunnable with Runnable {
   private[this] var _u: U = _
 
