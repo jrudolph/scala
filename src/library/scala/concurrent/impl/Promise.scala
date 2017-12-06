@@ -72,22 +72,18 @@ private final class CallbackRunnable[T](val executor: ExecutionContext, val onCo
   }
 }
 
-private abstract class MultiStageCallback[T, U](executor: ExecutionContext) extends Callback[T] with Runnable {
-  executor.prepare()
-
+private final class MultiStageCallback[T, U](executor: ExecutionContext, firstStage: (Try[T], U => Unit) => Unit, secondStage: U => Unit) extends Callback[T] with Runnable {
   private[this] var _u: U = _
 
   final def run(): Unit = try secondStage(_u) catch { case NonFatal(e) => executor reportFailure e }
   final def executeWithValue(v: Try[T]): Unit =
-    try firstStage(v) catch { case NonFatal(e) => executor reportFailure e }
-  protected def dispatchSecondStage(u: U): Unit = {
+    try firstStage(v, dispatchSecondStage) catch { case NonFatal(e) => executor reportFailure e }
+
+  private def dispatchSecondStage(u: U): Unit = {
     // TODO: check that we only run once?
     _u = u
     executor.execute(this)
   }
-
-  protected def firstStage(v: Try[T]): Unit
-  protected def secondStage(u: U): Unit
 }
 
 private[concurrent] object Promise {
@@ -325,59 +321,39 @@ private[concurrent] object Promise {
 
     // optimized implementations for `onFailure` like methods that avoid scheduling a Callable in the happy case
     override def onFailure[U](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Unit =
-      dispatchOrAddCallback(
-        new MultiStageCallback[T, Throwable](executor) {
-          protected def firstStage(v: Try[T]): Unit =
-            v match {
-              case Success(_) => // nothing to do
-              case Failure(ex) => dispatchSecondStage(ex)
-            }
-
-          protected def secondStage(exception: Throwable): Unit =
-            try if (pf isDefinedAt exception) pf(exception)
-            catch { case NonFatal(e) => executor reportFailure e }
-        }
+      dispatchOrAddMultiStageCallback[Throwable](executor,
+        (v, dispatchSecondStage) =>
+          v match {
+            case Success(_) => // nothing to do
+            case Failure(ex) => dispatchSecondStage(ex)
+          },
+        exception => if (pf isDefinedAt exception) pf(exception)
       )
 
-    override def recover[U >: T](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Future[U] = {
-      val p = new DefaultPromise[U]()
-
-      dispatchOrAddCallback(
-        new MultiStageCallback[T, Throwable](executor) {
-          protected def firstStage(v: Try[T]): Unit =
-            v match {
-              case Success(t) => p.success(t)
-              case Failure(ex) => dispatchSecondStage(ex)
-            }
-
-          protected def secondStage(exception: Throwable): Unit =
-            try if (pf isDefinedAt exception) p.success(pf(exception)) else p.failure(exception)
-            catch { case NonFatal(e) => p.failure(e) }
-        }
-      )
-
-      p.future
-    }
+    override def recover[U >: T](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Future[U] =
+      recoverWith {
+        case exception if pf.isDefinedAt(exception) => Future.successful(pf(exception))
+      }
 
     override def recoverWith[U >: T](pf: PartialFunction[Throwable, Future[U]])(implicit executor: ExecutionContext): Future[U] = {
       val p = new DefaultPromise[U]()
 
-      dispatchOrAddCallback(
-        new MultiStageCallback[T, Throwable](executor) {
-          protected def firstStage(v: Try[T]): Unit =
+      dispatchOrAddMultiStageCallback[Throwable](executor,
+        (v, dispatchSecondStage) =>
             v match {
               case Success(t) => p.success(t)
               case Failure(ex) => dispatchSecondStage(ex)
-            }
-
-          protected def secondStage(exception: Throwable): Unit =
+            },
+        exception =>
             try if (pf isDefinedAt exception) p.completeWith(pf(exception)) else p.failure(exception)
             catch { case NonFatal(e) => p.failure(e) }
-        }
       )
 
       p.future
     }
+
+    private def dispatchOrAddMultiStageCallback[U](executor: ExecutionContext, firstStage: (Try[T], U => Unit) => Unit, secondStage: U => Unit): Unit =
+      dispatchOrAddCallback(new MultiStageCallback[T, U](executor.prepare(), firstStage, secondStage))
 
     /** Tries to add the callback, if already completed, it dispatches the callback to be executed.
      *  Used by `onComplete()` to add callbacks to a promise and by `link()` to transfer callbacks
