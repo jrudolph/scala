@@ -8,21 +8,18 @@
 
 package scala.concurrent.impl
 
-import scala.concurrent.{CanAwait, ExecutionContext, ExecutionException, OnCompleteRunnable, TimeoutException}
+import scala.concurrent.{ CanAwait, ExecutionContext, ExecutionException, Future, OnCompleteRunnable, TimeoutException }
 import scala.concurrent.Future.InternalCallbackExecutor
-import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
-import scala.util.{Failure, Success, Try}
+import scala.util.{ Try, Success, Failure }
 import java.util.concurrent.locks.AbstractQueuedSynchronizer
 import java.util.concurrent.atomic.AtomicReference
-
-import scala.concurrent.Future
 
 private[concurrent] trait Promise[T] extends scala.concurrent.Promise[T] with scala.concurrent.Future[T] {
   def future: this.type = this
 
-  import scala.concurrent.Future
   import scala.concurrent.impl.Promise.DefaultPromise
 
   override def transform[S](f: Try[T] => Try[S])(implicit executor: ExecutionContext): Future[S] = {
@@ -51,13 +48,13 @@ private[concurrent] trait Promise[T] extends scala.concurrent.Promise[T] with sc
 }
 
 /** Common super trait for CallbackRunnable and FilteredCallbackRunnable */
-private sealed trait RunnableWithExecuteWithValue[T] {
+private sealed abstract class RunnableWithExecuteWithValue[T] extends Runnable {
   def executeWithValue(v: Try[T]): Unit
 }
 
 /* Precondition: `executor` is prepared, i.e., `executor` has been returned from invocation of `prepare` on some other `ExecutionContext`.
  */
-private final class CallbackRunnable[T](val executor: ExecutionContext, val onComplete: Try[T] => Any) extends Runnable with OnCompleteRunnable with RunnableWithExecuteWithValue[T] {
+private final class CallbackRunnable[T](val executor: ExecutionContext, val onComplete: Try[T] => Any) extends RunnableWithExecuteWithValue[T] with OnCompleteRunnable {
   // must be filled in before running it
   var value: Try[T] = null
 
@@ -310,7 +307,7 @@ private[concurrent] object Promise {
 
     // optimized implementations for `onFailure` like methods that avoid scheduling a Callable in the happy case
     override def onFailure[U](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Unit =
-      dispatchOrAddCallback(new Runnable with RunnableWithExecuteWithValue[T] {
+      dispatchOrAddCallback(new RunnableWithExecuteWithValue[T] {
         executor.prepare()
 
         var exception: Throwable = _
@@ -327,11 +324,10 @@ private[concurrent] object Promise {
           } catch { case NonFatal(e) => executor reportFailure e }
       })
 
-    // these ones still need a better idea (like dispatchWithFilter) instead of having to copy and paste for every single new instance
     override def recover[U >: T](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Future[U] = {
       val p = new DefaultPromise[U]()
 
-      dispatchOrAddCallback(new Runnable with RunnableWithExecuteWithValue[T] {
+      dispatchOrAddCallback(new RunnableWithExecuteWithValue[T] {
         executor.prepare()
 
         var exception: Throwable = _
@@ -354,7 +350,7 @@ private[concurrent] object Promise {
     override def recoverWith[U >: T](pf: PartialFunction[Throwable, Future[U]])(implicit executor: ExecutionContext): Future[U] = {
       val p = new DefaultPromise[U]()
 
-      dispatchOrAddCallback(new Runnable with RunnableWithExecuteWithValue[T] {
+      dispatchOrAddCallback(new RunnableWithExecuteWithValue[T] {
         executor.prepare()
 
         var exception: Throwable = _
