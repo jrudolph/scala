@@ -48,13 +48,13 @@ private[concurrent] trait Promise[T] extends scala.concurrent.Promise[T] with sc
 }
 
 /** Common super trait for CallbackRunnable and FilteredCallbackRunnable */
-private sealed abstract class RunnableWithExecuteWithValue[T] extends Runnable {
+private sealed abstract class Callback[T] {
   def executeWithValue(v: Try[T]): Unit
 }
 
 /* Precondition: `executor` is prepared, i.e., `executor` has been returned from invocation of `prepare` on some other `ExecutionContext`.
  */
-private final class CallbackRunnable[T](val executor: ExecutionContext, val onComplete: Try[T] => Any) extends RunnableWithExecuteWithValue[T] with OnCompleteRunnable {
+private final class CallbackRunnable[T](val executor: ExecutionContext, val onComplete: Try[T] => Any) extends Callback[T] with OnCompleteRunnable with Runnable {
   // must be filled in before running it
   var value: Try[T] = null
 
@@ -70,6 +70,24 @@ private final class CallbackRunnable[T](val executor: ExecutionContext, val onCo
     // already be running on a different thread!
     try executor.execute(this) catch { case NonFatal(t) => executor reportFailure t }
   }
+}
+
+private abstract class MultiStageCallback[T, U](executor: ExecutionContext) extends Callback[T] with Runnable {
+  executor.prepare()
+
+  private[this] var _u: U = _
+
+  final def run(): Unit = try secondStage(_u) catch { case NonFatal(e) => executor reportFailure e }
+  final def executeWithValue(v: Try[T]): Unit =
+    try firstStage(v) catch { case NonFatal(e) => executor reportFailure e }
+  protected def dispatchSecondStage(u: U): Unit = {
+    // TODO: check that we only run once?
+    _u = u
+    executor.execute(this)
+  }
+
+  protected def firstStage(v: Try[T]): Unit
+  protected def secondStage(u: U): Unit
 }
 
 private[concurrent] object Promise {
@@ -307,42 +325,36 @@ private[concurrent] object Promise {
 
     // optimized implementations for `onFailure` like methods that avoid scheduling a Callable in the happy case
     override def onFailure[U](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Unit =
-      dispatchOrAddCallback(new RunnableWithExecuteWithValue[T] {
-        executor.prepare()
+      dispatchOrAddCallback(
+        new MultiStageCallback[T, Throwable](executor) {
+          protected def firstStage(v: Try[T]): Unit =
+            v match {
+              case Success(_) => // nothing to do
+              case Failure(ex) => dispatchSecondStage(ex)
+            }
 
-        var exception: Throwable = _
-        def run(): Unit =
-          try { if (pf isDefinedAt exception) pf(exception) }
-          catch { case NonFatal(e) => executor reportFailure e }
-
-        def executeWithValue(v: Try[T]): Unit =
-          try v match {
-            case Success(t) => // nothing to do
-            case Failure(ex) =>
-              exception = ex
-              executor.execute(this)
-          } catch { case NonFatal(e) => executor reportFailure e }
-      })
+          protected def secondStage(exception: Throwable): Unit =
+            try if (pf isDefinedAt exception) pf(exception)
+            catch { case NonFatal(e) => executor reportFailure e }
+        }
+      )
 
     override def recover[U >: T](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Future[U] = {
       val p = new DefaultPromise[U]()
 
-      dispatchOrAddCallback(new RunnableWithExecuteWithValue[T] {
-        executor.prepare()
+      dispatchOrAddCallback(
+        new MultiStageCallback[T, Throwable](executor) {
+          protected def firstStage(v: Try[T]): Unit =
+            v match {
+              case Success(t) => p.success(t)
+              case Failure(ex) => dispatchSecondStage(ex)
+            }
 
-        var exception: Throwable = _
-        def run(): Unit =
-          try { if (pf isDefinedAt exception) p.success(pf(exception)) else p.failure(exception)}
-          catch { case NonFatal(e) => p.failure(e) }
-
-        def executeWithValue(v: Try[T]): Unit =
-          try v match {
-          case Success(t) => p.success(t)
-          case Failure(ex) =>
-            exception = ex
-            executor.execute(this)
-        } catch { case NonFatal(e) => executor reportFailure e }
-      })
+          protected def secondStage(exception: Throwable): Unit =
+            try if (pf isDefinedAt exception) p.success(pf(exception)) else p.failure(exception)
+            catch { case NonFatal(e) => p.failure(e) }
+        }
+      )
 
       p.future
     }
@@ -350,22 +362,19 @@ private[concurrent] object Promise {
     override def recoverWith[U >: T](pf: PartialFunction[Throwable, Future[U]])(implicit executor: ExecutionContext): Future[U] = {
       val p = new DefaultPromise[U]()
 
-      dispatchOrAddCallback(new RunnableWithExecuteWithValue[T] {
-        executor.prepare()
+      dispatchOrAddCallback(
+        new MultiStageCallback[T, Throwable](executor) {
+          protected def firstStage(v: Try[T]): Unit =
+            v match {
+              case Success(t) => p.success(t)
+              case Failure(ex) => dispatchSecondStage(ex)
+            }
 
-        var exception: Throwable = _
-        def run(): Unit =
-          try { if (pf isDefinedAt exception) p.completeWith(pf(exception)) else p.failure(exception) }
-          catch { case NonFatal(e) => p.failure(e) }
-
-        def executeWithValue(v: Try[T]): Unit =
-          try v match {
-            case Success(t) => p.success(t)
-            case Failure(ex) =>
-              exception = ex
-              executor.execute(this)
-          } catch { case NonFatal(e) => executor reportFailure e }
-      })
+          protected def secondStage(exception: Throwable): Unit =
+            try if (pf isDefinedAt exception) p.completeWith(pf(exception)) else p.failure(exception)
+            catch { case NonFatal(e) => p.failure(e) }
+        }
+      )
 
       p.future
     }
@@ -375,7 +384,7 @@ private[concurrent] object Promise {
      *  to the root promise when linking two promises together.
      */
     @tailrec
-    private def dispatchOrAddCallback(runnable: RunnableWithExecuteWithValue[T]): Unit = {
+    private def dispatchOrAddCallback(runnable: Callback[T]): Unit = {
       get() match {
         case r: Try[_]          => runnable.executeWithValue(r.asInstanceOf[Try[T]])
         case dp: DefaultPromise[_] => compressedRoot(dp).dispatchOrAddCallback(runnable)
