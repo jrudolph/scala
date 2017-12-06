@@ -72,7 +72,7 @@ private final class DispatchingCallback[T](val executor: ExecutionContext, val o
   }
 }
 
-private final class MultiStageCallback[T, U](executor: ExecutionContext, firstStage: (Try[T], U => Unit) => Unit, secondStage: U => Unit) extends Callback[T] with Runnable {
+private final class MultiStageCallback[T, U](executor: ExecutionContext, firstStage: (Try[T], U => Unit) => Unit, secondStage: U => Unit) extends Callback[T] with OnCompleteRunnable with Runnable {
   private[this] var _u: U = _
 
   final def run(): Unit = try secondStage(_u) catch { case NonFatal(e) => executor reportFailure e }
