@@ -75,40 +75,6 @@ private final class CallbackRunnable[T](val executor: ExecutionContext, val onCo
   }
 }
 
-/**
- * A special cased callback runnable that runs the filter directly and then only dispatches the userCode if the filter succeeded.
- */
-private final class FilteredCallbackRunnable[T, U ](
-  val executor: ExecutionContext,
-  val filter: PartialFunction[Try[T], U],
-  val userCode: U => Any
-) extends Runnable with OnCompleteRunnable with RunnableWithExecuteWithValue[T] {
-  // must be filled in before running it
-  var value: U = _
-
-  override def run() = {
-    require(value.asInstanceOf[AnyRef] ne null) // must set value to non-null before running!
-    try userCode(value) catch { case NonFatal(e) => executor reportFailure e }
-  }
-
-  def executeWithValue(v: Try[T]): Unit = {
-    require(value.asInstanceOf[AnyRef] eq null) // can't complete it twice
-
-    try {
-      val filtered = filter.applyOrElse(v, FilteredCallbackRunnable.default[T, U])
-      if (filtered != FilteredCallbackRunnable.FilteredOut) {
-        value = filtered
-        executor.execute(this)
-      }
-    } catch { case NonFatal(e) => executor reportFailure e }
-  }
-}
-private object FilteredCallbackRunnable {
-  val FilteredOut = new Object
-  def default[T, U]: Try[T] => U = defaultFunc.asInstanceOf[Try[T] => U]
-  val defaultFunc = (_: Try[_]) => FilteredCallbackRunnable.FilteredOut
-}
-
 private[concurrent] object Promise {
 
   private def resolveTry[T](source: Try[T]): Try[T] = source match {
@@ -344,7 +310,22 @@ private[concurrent] object Promise {
 
     // optimized implementations for `onFailure` like methods that avoid scheduling a Callable in the happy case
     override def onFailure[U](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Unit =
-      dispatchWithFilter[Throwable](executor, { case Failure(ex) => ex }, pf.applyOrElse[Throwable, U](_, ex => ex.asInstanceOf[U]))
+      dispatchOrAddCallback(new Runnable with RunnableWithExecuteWithValue[T] {
+        executor.prepare()
+
+        var exception: Throwable = _
+        def run(): Unit =
+          try { if (pf isDefinedAt exception) pf(exception) }
+          catch { case NonFatal(e) => executor reportFailure e }
+
+        def executeWithValue(v: Try[T]): Unit =
+          try v match {
+            case Success(t) => // nothing to do
+            case Failure(ex) =>
+              exception = ex
+              executor.execute(this)
+          } catch { case NonFatal(e) => executor reportFailure e }
+      })
 
     // these ones still need a better idea (like dispatchWithFilter) instead of having to copy and paste for every single new instance
     override def recover[U >: T](pf: PartialFunction[Throwable, U])(implicit executor: ExecutionContext): Future[U] = {
@@ -355,7 +336,7 @@ private[concurrent] object Promise {
 
         var exception: Throwable = _
         def run(): Unit =
-          try { if (pf isDefinedAt exception) p.success(pf(exception)) else this }
+          try { if (pf isDefinedAt exception) p.success(pf(exception)) else p.failure(exception)}
           catch { case NonFatal(e) => p.failure(e) }
 
         def executeWithValue(v: Try[T]): Unit =
@@ -378,7 +359,7 @@ private[concurrent] object Promise {
 
         var exception: Throwable = _
         def run(): Unit =
-          try { if (pf isDefinedAt exception) p.completeWith(pf(exception)) else this }
+          try { if (pf isDefinedAt exception) p.completeWith(pf(exception)) else p.failure(exception) }
           catch { case NonFatal(e) => p.failure(e) }
 
         def executeWithValue(v: Try[T]): Unit =
@@ -392,17 +373,6 @@ private[concurrent] object Promise {
 
       p.future
     }
-
-    /* Works also for success case but not as important here
-    override def onSuccess[U](pf: PartialFunction[T, U])(implicit executor: ExecutionContext): Unit =
-      dispatchWithFilter[T](executor, { case Success(t) => t }, pf.applyOrElse(_, (t: T) => t.asInstanceOf[U]))
-
-    override def foreach[U](f: T => U)(implicit executor: ExecutionContext): Unit =
-      dispatchWithFilter[T](executor, { case Success(t) => t }, f)
-    */
-
-    private def dispatchWithFilter[U](executor: ExecutionContext, filter: PartialFunction[Try[T], U], userCode: U => Any): Unit =
-      dispatchOrAddCallback(new FilteredCallbackRunnable[T, U](executor.prepare(), filter, userCode))
 
     /** Tries to add the callback, if already completed, it dispatches the callback to be executed.
      *  Used by `onComplete()` to add callbacks to a promise and by `link()` to transfer callbacks
