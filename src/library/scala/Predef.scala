@@ -308,13 +308,13 @@ object Predef extends LowPriorityImplicits with DeprecatedPredef {
   // implicit classes -----------------------------------------------------
 
   /** @group implicit-classes-any */
-  implicit final class ArrowAssoc[A](private val self: A) extends AnyVal {
+  implicit final class ArrowAssoc[A](val self: A) extends AnyVal {
     @inline def -> [B](y: B): Tuple2[A, B] = Tuple2(self, y)
     def →[B](y: B): Tuple2[A, B] = ->(y)
   }
 
   /** @group implicit-classes-any */
-  implicit final class Ensuring[A](private val self: A) extends AnyVal {
+  implicit final class Ensuring[A](val self: A) extends AnyVal {
     def ensuring(cond: Boolean): A = { assert(cond); self }
     def ensuring(cond: Boolean, msg: => Any): A = { assert(cond, msg); self }
     def ensuring(cond: A => Boolean): A = { assert(cond(self)); self }
@@ -322,7 +322,7 @@ object Predef extends LowPriorityImplicits with DeprecatedPredef {
   }
 
   /** @group implicit-classes-any */
-  implicit final class StringFormat[A](private val self: A) extends AnyVal {
+  implicit final class StringFormat[A](val self: A) extends AnyVal {
     /** Returns string formatted according to given `format` string.
      *  Format strings are as for `String.format`
      *  (@see java.lang.String.format).
@@ -332,11 +332,11 @@ object Predef extends LowPriorityImplicits with DeprecatedPredef {
 
   // scala/bug#8229 retaining the pre 2.11 name for source compatibility in shadowing this implicit
   /** @group implicit-classes-any */
-  implicit final class any2stringadd[A](private val self: A) extends AnyVal {
+  implicit final class any2stringadd[A](val self: A) extends AnyVal {
     def +(other: String): String = String.valueOf(self) + other
   }
 
-  implicit final class RichException(private val self: Throwable) extends AnyVal {
+  implicit final class RichException(val self: Throwable) extends AnyVal {
     import scala.compat.Platform.EOL
     @deprecated("use Throwable#getStackTrace", "2.11.0") def getStackTraceString = self.getStackTrace().mkString("", EOL, EOL)
   }

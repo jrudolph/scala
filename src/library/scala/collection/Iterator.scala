@@ -739,7 +739,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
         case -2 => status = -1 ; true
         case -1 => false
         case  1 => store(hd) ; status = 0 ; finish()
-        case  0 => 
+        case  0 =>
           status = -1
           while (self.hasNext) {
             val a = self.next()
@@ -1103,7 +1103,7 @@ trait Iterator[+A] extends TraversableOnce[A] {
   extends AbstractIterator[Seq[B]]
      with Iterator[Seq[B]] {
 
-    require(size >= 1 && step >= 1, f"size=$size%d and step=$step%d, but both must be positive")
+    require(size >= 1 && step >= 1, s"size=$size and step=$step, but both must be positive")
 
     private[this] var buffer: ArrayBuffer[B] = ArrayBuffer()  // the buffer
     private[this] var filled = false                          // whether the buffer is "hot"

@@ -51,10 +51,10 @@ package util
  *
  *  Since `Either` defines the methods `map` and `flatMap`, it can also be used in for comprehensions:
  *  {{{
- *  val right1 = Right(1)   : Right[Double, Int] 
+ *  val right1 = Right(1)   : Right[Double, Int]
  *  val right2 = Right(2)
  *  val right3 = Right(3)
- *  val left23 = Left(23.0) : Left[Double, Int]  
+ *  val left23 = Left(23.0) : Left[Double, Int]
  *  val left42 = Left(42.0)
  *
  *  for {
@@ -468,7 +468,7 @@ object Either {
    *  r.merge: Seq[Int] // Vector(1)
    *  }}}
    */
-  implicit class MergeableEither[A](private val x: Either[A, A]) extends AnyVal {
+  implicit class MergeableEither[A](val x: Either[A, A]) extends AnyVal {
     def merge: A = x match {
       case Right(a) => a
       case Left(a)  => a

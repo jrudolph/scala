@@ -510,7 +510,7 @@ object Range {
 
   // As there is no appealing default step size for not-really-integral ranges,
   // we offer a partially constructed object.
-  class Partial[T, U](private val f: T => U) extends AnyVal {
+  class Partial[T, U](val f: T => U) extends AnyVal {
     def by(x: T): U = f(x)
     override def toString = "Range requires step"
   }
