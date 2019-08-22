@@ -387,7 +387,7 @@ abstract class BackendUtils extends PerRunInit {
     }
 
   def onIndyLambdaImplMethod[T](hostClass: InternalName) (action: mutable.LinkedHashSet[asm.Handle] => T): T ={
-    val methods = indyLambdaImplMethods.computeIfAbsent(hostClass, (_) => mutable.LinkedHashSet[asm.Handle]())
+    val methods = indyLambdaImplMethods.computeIfAbsent(hostClass, new java.util.function.Function[Any, mutable.LinkedHashSet[asm.Handle]] { def apply(x: Any) = mutable.LinkedHashSet[asm.Handle]() })
 
     methods.synchronized (action(methods))
   }
@@ -813,7 +813,7 @@ object BackendUtils {
         case _ => false
       }
 
-      private val isClassNameEnd: CharBooleanFunction = (c: Char) => c == '<' || c == '.' || c == ';'
+      private val isClassNameEnd: CharBooleanFunction = new CharBooleanFunction { def apply(c: Char) = c == '<' || c == '.' || c == ';' }
 
       private def typeArguments(): Unit = if (current == '<') {
         skip()

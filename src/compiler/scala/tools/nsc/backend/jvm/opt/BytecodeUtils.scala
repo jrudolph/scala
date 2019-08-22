@@ -128,9 +128,10 @@ object BytecodeUtils {
   // cross-jdk
   def hasCallerSensitiveAnnotation(methodNode: MethodNode): Boolean =
     methodNode.visibleAnnotations != null &&
-    methodNode.visibleAnnotations.stream.filter(ann =>
-      ann.desc == "Lsun/reflect/CallerSensitive;" || ann.desc == "Ljdk/internal/reflect/CallerSensitive;"
-    ).findFirst.isPresent
+    methodNode.visibleAnnotations.stream.filter(new java.util.function.Predicate[AnnotationNode] {
+      def test(ann: AnnotationNode) =
+        ann.desc == "Lsun/reflect/CallerSensitive;" || ann.desc == "Ljdk/internal/reflect/CallerSensitive;"
+    }).findFirst.isPresent
 
   def isFinalClass(classNode: ClassNode): Boolean = (classNode.access & ACC_FINAL) != 0
 

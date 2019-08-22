@@ -2829,7 +2829,7 @@ trait Types
       val tvars = quantifiedFresh map (tparam => TypeVar(tparam))
       val underlying1 = underlying.instantiateTypeParams(quantified, tvars) // fuse subst quantified -> quantifiedFresh -> tvars
       op(underlying1) && {
-        solve(tvars, quantifiedFresh, (_ => Invariant), upper = false, depth) &&
+        solve(tvars, quantifiedFresh, new Variance.Extractor[Symbol]{ def apply(a: Symbol): Variance = Invariant}, upper = false, depth) &&
         isWithinBounds(NoPrefix, NoSymbol, quantifiedFresh, tvars map (_.inst))
       }
     }
@@ -4011,8 +4011,8 @@ trait Types
   )
 
   private def infoTypeDepth(sym: Symbol): Depth = typeDepth(sym.info)
-  private def symTypeDepth(syms: List[Symbol]): Depth  = Depth.maximumBy(syms)(infoTypeDepth)
-  private def baseTypeSeqDepth(tps: List[Type]): Depth = Depth.maximumBy(tps)((t: Type) => t.baseTypeSeqDepth)
+  private def symTypeDepth(syms: List[Symbol]): Depth  = Depth.maximumBy(syms)(new DepthFunction[Symbol]{ def apply(s: Symbol): Depth = infoTypeDepth(s) })
+  private def baseTypeSeqDepth(tps: List[Type]): Depth = Depth.maximumBy(tps)(new DepthFunction[Type] { def apply(t: Type): Depth = t.baseTypeSeqDepth})
 
   /** Is intersection of given types populated? That is,
    *  for all types tp1, tp2 in intersection
@@ -4782,7 +4782,7 @@ trait Types
   }
 
   private[scala] def maxDepth(tps: List[Type]): Depth =
-    Depth.maximumBy(tps)(typeDepth)
+    Depth.maximumBy(tps)(new DepthFunction[Type]{def apply(t: Type) = typeDepth(t)})
 
   @tailrec private def areTrivialTypes(tps: List[Type]): Boolean = tps match {
     case tp :: rest => tp.isTrivial && areTrivialTypes(rest)

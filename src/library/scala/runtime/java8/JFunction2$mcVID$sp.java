@@ -16,7 +16,7 @@
 
 package scala.runtime.java8;
 
-@FunctionalInterface
+//@FunctionalInterface
 public interface JFunction2$mcVID$sp extends scala.Function2, java.io.Serializable {
     void apply$mcVID$sp(int v1, double v2);
 

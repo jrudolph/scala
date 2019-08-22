@@ -23,7 +23,7 @@ trait Scopes extends api.Scopes { self: SymbolTable =>
   // Reset `scopeCount` per every run
   private[scala] var scopeCount = 0
   perRunCaches.recordCache {
-    val clearCount: Clearable = () => {scopeCount = 0}
+    val clearCount: Clearable = new Clearable { def clear(): Unit = {scopeCount = 0} }
     clearCount
   }
 

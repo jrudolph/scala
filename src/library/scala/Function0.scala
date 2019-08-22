@@ -17,7 +17,7 @@ package scala
 
 
 /** A function of 0 parameters.
- *  
+ *
  *  In the following example, the definition of javaVersion is a
  *  shorthand for the anonymous class definition anonfun0:
  *
@@ -32,7 +32,7 @@ package scala
  * }
  *  }}}
  */
-trait Function0[@specialized(Specializable.Primitives) +R] extends AnyRef { self =>
+trait Function0[/*@specialized(Specializable.Primitives)*/ +R] extends AnyRef { self =>
   /** Apply the body of this function to the arguments.
    *  @return   the result of function application.
    */

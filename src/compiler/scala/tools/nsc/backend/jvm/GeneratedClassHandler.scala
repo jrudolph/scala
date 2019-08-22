@@ -174,7 +174,7 @@ private[jvm] object GeneratedClassHandler {
   }
 
   private final class SyncWritingClassHandler(val postProcessor: PostProcessor)
-    extends WritingClassHandler((r) => r.run()) {
+    extends WritingClassHandler(new Executor { def execute(r: Runnable): Unit = r.run()}) {
 
     override def toString: String = s"SyncWriting"
 

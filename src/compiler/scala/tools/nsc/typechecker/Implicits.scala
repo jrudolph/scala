@@ -599,7 +599,7 @@ trait Implicits {
                 if (StatisticsStatics.areSomeColdStatsEnabled) statistics.incCounter(matchesPtInstMismatch1)
                 false
               } else {
-                val targs = solvedTypes(tvars, allUndetparams, varianceInType(wildPt), upper = false, lubDepth(tpInstantiated :: wildPt :: Nil))
+                val targs = solvedTypes(tvars, allUndetparams, new Variance.Extractor[Symbol] { def apply(sym: Symbol) = varianceInType(wildPt)(sym) }, upper = false, lubDepth(tpInstantiated :: wildPt :: Nil))
                 val adjusted = adjustTypeArgs(allUndetparams, tvars, targs)
                 val tpSubst = deriveTypeWithWildcards(adjusted.undetParams)(tp.instantiateTypeParams(adjusted.okParams, adjusted.okArgs))
                 if(!matchesPt(tpSubst, wildPt, adjusted.undetParams)) {
@@ -797,7 +797,7 @@ trait Implicits {
             if (tvars.nonEmpty)
               typingLog("solve", ptLine("tvars" -> tvars, "tvars.constr" -> tvars.map(_.constr)))
 
-            val targs = solvedTypes(tvars, undetParams, varianceInType(pt), upper = false, lubDepth(itree3.tpe :: pt :: Nil))
+            val targs = solvedTypes(tvars, undetParams, new Variance.Extractor[Symbol] { def apply(sym: Symbol) = varianceInType(pt)(sym) }, upper = false, lubDepth(itree3.tpe :: pt :: Nil))
 
             // #2421: check that we correctly instantiated type parameters outside of the implicit tree:
             checkBounds(itree3, NoPrefix, NoSymbol, undetParams, targs, "inferred ")
@@ -1060,12 +1060,12 @@ trait Implicits {
               iss = iss.tail
               i += 1
             }
-            if (removed) matches.removeIf(_ == null) // remove for real now.
+            if (removed) matches.removeIf(new java.util.function.Predicate[AnyRef] { def test(x: AnyRef) = x == null }) // remove for real now.
           }
           // most frequent one first. Sort in-place.
-          matches.sort(((x, y) => java.lang.Integer.compare(y.info.useCount(isView), x.info.useCount(isView))))
+          matches.sort(new java.util.Comparator[Candidate] { def compare(x: Candidate, y: Candidate) = java.lang.Integer.compare(y.info.useCount(isView), x.info.useCount(isView))})
           val result = new ListBuffer[ImplicitInfo]
-          matches.forEach(x => result += x.info)
+          matches.forEach(new java.util.function.Consumer[Candidate]{ def accept(x: Candidate) = result += x.info })
           result.toList
         }
       }

@@ -94,7 +94,7 @@ object ThreadPoolFactory {
       new SinglePhaseInstrumentedThreadPoolExecutor(nThreads, nThreads, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue[Runnable](maxQueueSize), threadFactory, rejectHandler)
     }
 
-    override protected def wrapWorker(worker: Runnable, shortId: String): Runnable = () => {
+    override protected def wrapWorker(worker: Runnable, shortId: String): Runnable = new Runnable { def run() = {
       val data = new ThreadProfileData
       localData.set(data)
 
@@ -104,7 +104,7 @@ object ThreadPoolFactory {
         val threadRange = ProfileRange(profileStart, snap, phase, shortId, data.taskCount, Thread.currentThread())
         profiler.completeBackground(threadRange)
       }
-    }
+    }}
 
     /**
       * data for thread run. Not threadsafe, only written from a single thread

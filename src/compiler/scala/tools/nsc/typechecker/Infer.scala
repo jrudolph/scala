@@ -387,7 +387,7 @@ trait Infer extends Checkable {
         case mt: MethodType if mt.isImplicit && isFullyDefined(pt) => MethodType(mt.params, AnyTpe)
         case _                                                     => restpe
       }
-      def solve() = solvedTypes(tvars, tparams, varianceInType(variance), upper = false, lubDepth(restpe :: pt :: Nil))
+      def solve() = solvedTypes(tvars, tparams, new Variance.Extractor[Symbol] { def apply(sym: Symbol) = varianceInType(variance)(sym) }, upper = false, lubDepth(restpe :: pt :: Nil))
 
       if (conforms)
         try solve() catch { case _: NoInstance => null }
@@ -545,7 +545,7 @@ trait Infer extends Checkable {
             "argument expression's type is not compatible with formal parameter type" + foundReqMsg(tp1, pt1))
         }
       }
-      val targs = solvedTypes(tvars, tparams, varianceInTypes(formals), upper = false, lubDepth(formals) max lubDepth(argtpes))
+      val targs = solvedTypes(tvars, tparams, new Variance.Extractor[Symbol] { def apply(sym: Symbol) = varianceInTypes(formals)(sym) }, upper = false, lubDepth(formals) max lubDepth(argtpes))
       // Can warn about inferring Any/AnyVal as long as they don't appear
       // explicitly anywhere amongst the formal, argument, result, or expected type.
       // ...or lower bound of a type param, since they're asking for it.
@@ -1027,7 +1027,8 @@ trait Infer extends Checkable {
             // debuglog("TVARS "+ (tvars map (_.constr)))
             // look at the argument types of the primary constructor corresponding to the pattern
             val varianceFun: Variance.Extractor[Symbol] =
-              if (ctorTp.paramTypes.isEmpty) varianceInType(ctorTp) else varianceInTypes(ctorTp.paramTypes)
+              if (ctorTp.paramTypes.isEmpty) new Variance.Extractor[Symbol] { def apply(sym: Symbol) = varianceInType(ctorTp)(sym) }
+              else new Variance.Extractor[Symbol] { def apply(sym: Symbol) = varianceInTypes(ctorTp.paramTypes)(sym) }
 
             // Note: this is the only place where solvedTypes (or, indirectly, solve) is called
             // with upper = true.
@@ -1102,7 +1103,7 @@ trait Infer extends Checkable {
       val tvars1 = tvars map (_.cloneInternal)
       // Note: right now it's not clear that solving is complete, or how it can be made complete!
       // So we should come back to this and investigate.
-      solve(tvars1, tvars1.map(_.origin.typeSymbol), (_ => Variance.Covariant), upper = false, Depth.AnyDepth)
+      solve(tvars1, tvars1.map(_.origin.typeSymbol), new Variance.Extractor[Symbol] { def apply(sym: Symbol) = Variance.Covariant } , upper = false, Depth.AnyDepth)
     }
 
     // this is quite nasty: it destructively changes the info of the syms of e.g., method type params

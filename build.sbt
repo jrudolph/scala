@@ -147,7 +147,8 @@ lazy val commonSettings = instanceSettings ++ clearSourceAndResourceDirectories 
   // we always assume that Java classes are standalone and do not have any dependency
   // on Scala classes
   compileOrder := CompileOrder.JavaThenScala,
-  javacOptions in Compile ++= Seq("-g", "-source", "1.8", "-target", "1.8", "-Xlint:unchecked"),
+  javaHome in Compile := Some(file(sys.props("java.home")).getParentFile),
+  javacOptions in Compile ++= Seq("-g", "-source", "1.8", "-target", "1.8"/*, "-Xlint:unchecked"*/),
   unmanagedJars in Compile := Seq.empty,  // no JARs in version control!
   sourceDirectory in Compile := baseDirectory.value,
   unmanagedSourceDirectories in Compile := List(baseDirectory.value),
@@ -185,7 +186,7 @@ lazy val commonSettings = instanceSettings ++ clearSourceAndResourceDirectories 
     // END: Copy/pasted from SBT
   },
   fork in run := true,
-  scalacOptions in Compile += "-Ywarn-unused:imports",
+  //scalacOptions in Compile += "-Ywarn-unused:imports",
   scalacOptions in Compile in doc ++= Seq(
     "-doc-footer", "epfl",
     "-diagrams",
@@ -403,6 +404,20 @@ lazy val library = configureAsSubproject(project)
   .settings(filterDocSources("*.scala" -- (regexFileFilter(".*/runtime/.*\\$\\.scala") ||
                                            regexFileFilter(".*/runtime/ScalaRunTime\\.scala") ||
                                            regexFileFilter(".*/runtime/StringAdd\\.scala"))))
+  .settings(
+    javaHome := {
+      val x = (javaHome).value
+      val newV = Some(file(sys.props("java.home")).getParentFile)
+      println(s"Old: $x new: $newV")
+      newV
+    },
+    javaHome in Compile := {
+      val x = (javaHome in Compile).value
+      val newV = Some(file(sys.props("java.home")).getParentFile)
+      println(s"Old: $x new: $newV")
+      newV
+    }
+  )
 
 lazy val reflect = configureAsSubproject(project)
   .settings(generatePropertiesFileSettings)
@@ -817,7 +832,7 @@ lazy val test = project
     fork in IntegrationTest := true,
     // enable this in 2.13, when tests pass
     //scalacOptions in Compile += "-Yvalidate-pos:parser,typer",
-    scalacOptions in Compile -= "-Ywarn-unused:imports",
+    //scalacOptions in Compile -= "-Ywarn-unused:imports",
     javaOptions in IntegrationTest ++= List("-Xmx2G", "-Dpartest.exec.in.process=true", "-Dfile.encoding=UTF-8", "-Duser.language=en", "-Duser.country=US"),
     testOptions in IntegrationTest += Tests.Argument("-Dfile.encoding=UTF-8", "-Duser.language=en", "-Duser.country=US"),
     testFrameworks += new TestFramework("scala.tools.partest.sbt.Framework"),

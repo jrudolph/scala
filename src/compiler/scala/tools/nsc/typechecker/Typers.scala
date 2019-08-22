@@ -2910,7 +2910,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
               fun.tpe <:< functionType(samInfoWithTVars.paramTypes, samInfoWithTVars.finalResultType)
 
               // solve constraints tracked by tvars
-              val targs = solvedTypes(tvars, tparams, varianceInType(sam.info), upper = false, lubDepth(sam.info :: Nil))
+              val targs = solvedTypes(tvars, tparams, new Variance.Extractor[Symbol] { def apply(sym: Symbol) = varianceInType(sam.info)(sym) }, upper = false, lubDepth(sam.info :: Nil))
 
               debuglog(s"sam infer: $pt --> ${appliedType(samTyCon, targs)} by ${fun.tpe} <:< $samInfoWithTVars --> $targs for $tparams")
 

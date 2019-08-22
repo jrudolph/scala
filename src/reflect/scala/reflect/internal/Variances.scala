@@ -207,7 +207,7 @@ trait Variances {
 
   /** Compute variance of type parameter `tparam` in all types `tps`. */
   final def varianceInTypes(tps: List[Type])(tparam: Symbol): Variance =
-    Variance.foldExtract(tps)(t => varianceInType(t)(tparam))
+    Variance.foldExtract(tps)(new Extractor[Type]{def apply(t: Type): Variance = varianceInType(t)(tparam)})
 
   /** Compute variance of type parameter `tparam` in type `tp`. */
   final def varianceInType(tp: Type)(tparam: Symbol): Variance = {
@@ -215,7 +215,7 @@ trait Variances {
   }
   private[this] val varianceInTypeCache = new ReusableInstance[varianceInType](() => new varianceInType)
 
-  private final class varianceInType {
+  private final class varianceInType { self =>
     private[this] var tp: Type = _
     private[this] var tparam: Symbol = _
 
@@ -227,13 +227,13 @@ trait Variances {
 
     // OPT these extractors are hoisted to fields to reduce allocation. We're also avoiding Function1[_, Variance] to
     //     avoid value class boxing.
-    private[this] lazy val inAnnotationAtp: Extractor[AnnotationInfo] = (a: AnnotationInfo) => inType(a.atp)
-    private[this] lazy val inArgParam: Extractor2[Type, Symbol]       = (a, b) => inType(a) * b.variance
-    private[this] lazy val inSym: Extractor[Symbol]                   = (sym: Symbol) => if (sym.isAliasType) inType(sym.info).cut else inType(sym.info)
-    private[this] val inType: Extractor[Type] = {
+    private[this] lazy val inAnnotationAtp: Extractor[AnnotationInfo] = new Extractor[AnnotationInfo]{def apply(a: AnnotationInfo) = inType(a.atp) }
+    private[this] lazy val inArgParam: Extractor2[Type, Symbol]       = new Extractor2[Type, Symbol]{def apply(a: Type, b: Symbol) = inType(a) * b.variance}
+    private[this] lazy val inSym: Extractor[Symbol]                   = new Extractor[Symbol]{def apply(sym: Symbol) = if (sym.isAliasType) inType(sym.info).cut else inType(sym.info)}
+    private[this] val inType: Extractor[Type] = new Extractor[Type]{ def apply(t: Type) = t match {
       case ErrorType | WildcardType | NoType | NoPrefix    => Bivariant
       case ThisType(_) | ConstantType(_)                   => Bivariant
-      case TypeRef(_, tparam, _) if tparam eq this.tparam  => Covariant
+      case TypeRef(_, tparam, _) if tparam eq self.tparam  => Covariant
       case BoundedWildcardType(bounds)                     => inType(bounds)
       case NullaryMethodType(restpe)                       => inType(restpe)
       case SingleType(pre, sym)                            => inType(pre)
@@ -245,7 +245,7 @@ trait Variances {
       case PolyType(tparams, restpe)                       => inSyms(tparams).flip & inType(restpe)
       case ExistentialType(tparams, restpe)                => inSyms(tparams)      & inType(restpe)
       case AnnotatedType(annots, tp)                       => inAnnots(annots)     & inType(tp)
-    }
+    }}
 
     def apply(tp: Type, tparam: Symbol): Variance = {
       this.tp = tp

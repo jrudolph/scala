@@ -16,7 +16,7 @@
 
 package scala.runtime.java8;
 
-@FunctionalInterface
+//@FunctionalInterface
 public interface JFunction2$mcZJJ$sp extends scala.Function2, java.io.Serializable {
     boolean apply$mcZJJ$sp(long v1, long v2);
 
