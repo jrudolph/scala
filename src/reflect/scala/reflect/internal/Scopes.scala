@@ -282,14 +282,14 @@ trait Scopes extends api.Scopes { self: SymbolTable =>
 
     /** Returns an iterator yielding every symbol with given name in this scope.
      */
-    def lookupAll(name: Name): Iterator[Symbol] = new Iterator[Symbol] {
-      var e = lookupEntry(name.asInstanceOf[Scopes.this.Name])
+    def lookupAll(n: Name): Iterator[Symbol] = new Iterator[Symbol] {
+      var e = lookupEntry(n)
       def hasNext: Boolean = e ne null
       def next(): Symbol = try e.sym finally e = lookupNextEntry(e)
     }
 
-    def lookupAllEntries(name: Name): Iterator[ScopeEntry] = new Iterator[ScopeEntry] {
-      var e = lookupEntry(name.asInstanceOf[Scopes.this.Name])
+    def lookupAllEntries(n: Name): Iterator[ScopeEntry] = new Iterator[ScopeEntry] {
+      var e = lookupEntry(n)
       def hasNext: Boolean = e ne null
       def next(): ScopeEntry = try e finally e = lookupNextEntry(e)
     }
