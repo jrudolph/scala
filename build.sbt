@@ -114,6 +114,8 @@ mimaReferenceVersion in Global := Some("2.12.0")
 
 scalaVersion in Global         := versionProps("starr.version")
 
+scalacOptions in ThisBuild += "-Yskip:xsbt-api"
+
 lazy val instanceSettings = Seq[Setting[_]](
   // we don't cross build Scala itself
   crossPaths := false,
