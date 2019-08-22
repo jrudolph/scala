@@ -181,7 +181,7 @@ private[util] trait InternalPositionImpl {
 
   def showError(msg: String): String = {
     def escaped(s: String) = {
-      def u(c: Int) = f"\\u$c%04x"
+      def u(c: Int) = s"\\u$c"
       def uable(c: Int) = (c < 0x20 && c != '\t') || c == 0x7F
       if (s exists (c => uable(c))) {
         val sb = new StringBuilder
@@ -193,7 +193,7 @@ private[util] trait InternalPositionImpl {
       def where     = p.line
       def content   = escaped(p.lineContent)
       def indicator = p.lineCaret
-      f"$where: $msg%n$content%n$indicator"
+      s"$where: $msg$content$indicator"
     }
     finalPosition match {
       case FakePos(fmsg) => s"$fmsg $msg"

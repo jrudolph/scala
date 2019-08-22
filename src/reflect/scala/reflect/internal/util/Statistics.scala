@@ -128,7 +128,7 @@ quant)
          r <- q :: q.children.toList if r.prefix.nonEmpty) yield r
 
   private def showPercent(x: Long, base: Long) =
-    if (base == 0) "" else f" (${x.toDouble / base.toDouble * 100}%2.1f%%)"
+    if (base == 0) "" else s" (${x.toDouble / base.toDouble * 100}%)"
 
   /** The base trait for quantities.
    *  Quantities with non-empty prefix are printed in the statistics info.
@@ -142,7 +142,7 @@ quant)
     val phases: Seq[String]
     def underlying: Quantity = this
     def showAt(phase: String) = phases.isEmpty || (phases contains phase)
-    def line = f"$prefix%-30s: ${this}"
+    def line = s"$prefix: ${this}"
     val children = new mutable.ListBuffer[Quantity]
   }
 
@@ -175,7 +175,7 @@ quant)
       if (value == 0) "0"
       else {
         assert(underlying.value != 0, prefix+"/"+underlying.line)
-        f"${value.toFloat / underlying.value}%2.1f"
+        s"${value.toFloat / underlying.value}"
       }
   }
 

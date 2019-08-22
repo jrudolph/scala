@@ -150,11 +150,15 @@ trait StandardLiftables { self: Universe =>
     implicit def unliftUnit: Unliftable[Unit]       = unliftPrimitive[Unit, scala.runtime.BoxedUnit]
     implicit def unliftString: Unliftable[String]   = Unliftable { case Literal(Constant(s: String)) => s }
 
-    implicit def unliftScalaSymbol: Unliftable[scala.Symbol] = Unliftable {
-      case Apply(ScalaDot(stdnme.Symbol), List(Literal(Constant(name: String)))) => scala.Symbol(name)
-    }
+    private val __Sym = stdnme.Symbol
+    private val __Wildcard = stdnme.WILDCARD
 
-    implicit def unliftName[T <: Name : ClassTag]: Unliftable[T] = Unliftable[T] { case Ident(name: T) => name; case Bind(name: T, Ident(stdnme.WILDCARD)) => name }
+    implicit def unliftScalaSymbol: Unliftable[scala.Symbol] =
+      Unliftable {
+        case Apply(ScalaDot(__Sym), List(Literal(Constant(name: String)))) => scala.Symbol(name)
+      }
+
+    implicit def unliftName[T <: Name : ClassTag]: Unliftable[T] = Unliftable[T] { case Ident(name: T) => name; case Bind(name: T, Ident(__Wildcard)) => name }
     implicit def unliftType: Unliftable[Type]                    = Unliftable[Type] { case tt: TypeTree if tt.tpe != null => tt.tpe }
     implicit def unliftConstant: Unliftable[Constant]            = Unliftable[Constant] { case Literal(const) => const }
 

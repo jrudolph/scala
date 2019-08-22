@@ -164,7 +164,7 @@ object ScalaClassLoader {
     if (!util.Properties.isJavaAtLeast("9")) null
     else {
       try {
-        MethodHandles.lookup().findStatic(classOf[ClassLoader], "getPlatformClassLoader", MethodType.methodType(classOf[ClassLoader])).invoke()
+        MethodHandles.lookup().findStatic(classOf[ClassLoader], "getPlatformClassLoader", MethodType.methodType(classOf[ClassLoader])).invoke().asInstanceOf[ClassLoader]
       } catch {
         case _: Throwable =>
           null
