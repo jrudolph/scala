@@ -368,6 +368,7 @@ lazy val bootstrap = project in file("target/bootstrap")
 
 lazy val library = configureAsSubproject(project)
   .settings(generatePropertiesFileSettings)
+  .settings(disableDocs)
   .settings(Osgi.settings)
   .settings(AutomaticModuleName.settings("scala.library"))
   .settings(
@@ -421,6 +422,7 @@ lazy val library = configureAsSubproject(project)
 
 lazy val reflect = configureAsSubproject(project)
   .settings(generatePropertiesFileSettings)
+  .settings(disableDocs)
   .settings(Osgi.settings)
   .settings(AutomaticModuleName.settings("scala.reflect"))
   .settings(
@@ -462,6 +464,7 @@ lazy val compilerOptionsExporter = Project("compilerOptionsExporter", file(".") 
 
 lazy val compiler = configureAsSubproject(project)
   .settings(generatePropertiesFileSettings)
+  .settings(disableDocs)
   .settings(generateBuildCharacterFileSettings)
   .settings(Osgi.settings)
   .settings(AutomaticModuleName.settings("scala.tools.nsc"))
@@ -480,12 +483,12 @@ lazy val compiler = configureAsSubproject(project)
     // (with strings) to deal with mutual recursion
     products in Compile in packageBin :=
       (products in Compile in packageBin).value ++
-        Seq((dependencyClasspath in Compile).value.find(_.get(moduleID.key) == Some(asmDep)).get.data) ++
+        Seq((dependencyClasspath in Compile).value.find(_.get(moduleID.key) == Some(asmDep)).get.data) /*++
         (products in Compile in packageBin in LocalProject("interactive")).value ++
         (products in Compile in packageBin in LocalProject("scaladoc")).value ++
         (products in Compile in packageBin in LocalProject("repl")).value ++
         (products in Compile in packageBin in LocalProject("repl-jline")).value ++
-        (products in Compile in packageBin in LocalProject("repl-jline-embedded")).value,
+        (products in Compile in packageBin in LocalProject("repl-jline-embedded")).value*/,
     includeFilter in unmanagedResources in Compile :=
       "*.tmpl" | "*.xml" | "*.js" | "*.css" | "*.html" | "*.properties" | "*.swf" |
       "*.png" | "*.gif" | "*.gif" | "*.txt",
