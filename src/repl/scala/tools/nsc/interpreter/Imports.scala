@@ -177,7 +177,7 @@ trait Imports {
         handler match {
           case h: ImportHandler if checkHeader(h) =>
             header.clear()
-            header append f"${h.member}%n"
+            header append s"${h.member}%n"
           // If the user entered an import, then just use it; add an import wrapping
           // level if the import might conflict with some other import
           case x: ImportHandler if x.importsWildcard =>

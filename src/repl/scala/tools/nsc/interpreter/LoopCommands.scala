@@ -79,7 +79,7 @@ trait LoopCommands { self: { def echo(msg: String): Unit } =>
   /** print a friendly help message */
   def helpCommand(line: String): Result = line match {
     case ""                => helpSummary()
-    case CommandMatch(cmd) => echo(f"%n${cmd.detailedHelp getOrElse cmd.help}")
+    case CommandMatch(cmd) => echo(s"%n${cmd.detailedHelp getOrElse cmd.help}")
     case _                 => ambiguousError(line)
   }
 

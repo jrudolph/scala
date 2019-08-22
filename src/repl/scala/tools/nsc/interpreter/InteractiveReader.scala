@@ -97,7 +97,7 @@ class SplashLoop(reader: InteractiveReader, prompt: String) extends Runnable {
     )
     if (isPrefix(line, ":paste", 3)) {
       // while collecting lines, check running flag
-      var help = f"// Entering paste mode (ctrl-D to finish)%n%n"
+      var help = s"// Entering paste mode (ctrl-D to finish)%n%n"
       def readWhile(cond: String => Boolean) = {
         Iterator continually reader.readLine(help) takeWhile { x =>
           help = ""
@@ -108,7 +108,7 @@ class SplashLoop(reader: InteractiveReader, prompt: String) extends Runnable {
       val next =
         if (text.isEmpty) "// Nothing pasted, nothing gained."
         else "// Exiting paste mode, now interpreting."
-      Console println f"%n${next}%n"
+      Console println s"%n${next}%n"
       text
     } else {
       line

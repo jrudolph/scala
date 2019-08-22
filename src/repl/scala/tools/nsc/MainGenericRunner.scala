@@ -96,7 +96,7 @@ class MainGenericRunner {
     }
 
     if (!command.ok)
-      errorFn(f"%n$shortUsageMsg")
+      errorFn(s"%n$shortUsageMsg")
     else if (command.shouldStopWithInfo)
       errorFn(command.getInfoMessage(sampleCompiler), isFailure = false)
     else

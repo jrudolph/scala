@@ -390,7 +390,7 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
       val info = cleanTypeAfterTyper(sym)
       val defn = sym defStringSeenAs info
 
-      f"[$mark$what%6s] $name%-25s $defn%s"
+      s"[$mark$what%6s] $name%-25s $defn%s"
     }
     if (!ObjectClass.isSubClass(sym.owner)) {
       // unlink previous

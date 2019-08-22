@@ -596,7 +596,7 @@ class ILoop(in0: Option[BufferedReader], protected val out: JPrintWriter) extend
         }
       case None =>
         if (history.historicize(text)) echo("Placing text in recent history.")
-        else echo(f"No EDITOR defined and you can't change history, echoing your text:%n$text")
+        else echo(s"No EDITOR defined and you can't change history, echoing your text:%n$text")
     }
 
     // if what is a number, use it as a line number or range in history

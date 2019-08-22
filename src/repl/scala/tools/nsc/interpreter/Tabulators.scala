@@ -112,7 +112,7 @@ trait VariColumnTabulator extends Tabulator {
 }
 
 private[interpreter] object SimpleMath {
-  implicit class DivRem(private val i: Int) extends AnyVal {
+  implicit class DivRem(val i: Int) extends AnyVal {
     /** i/n + if (i % n != 0) 1 else 0 */
     def /%(n: Int): Int = (i + n - 1) / n
   }

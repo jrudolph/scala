@@ -64,7 +64,7 @@ trait EchoReader extends SimpleReader {
   // if there is more input, then maybe echo the prompt and the input
   override def readOneLine(prompt: String) = {
     val input = readOneLine()
-    if (input != null) echo(f"$prompt$input%n")
+    if (input != null) echo(s"$prompt$input%n")
     input
   }
 }

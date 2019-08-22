@@ -487,7 +487,7 @@ object Javap {
       getOrElse (Seq("-help"))) // or else someone needs help
   }
 
-  def helpText: String = (helps map { case (name, help) => f"$name%-12.12s$help%n" }).mkString
+  def helpText: String = (helps map { case (name, help) => s"$name%-12.12s$help%n" }).mkString
 
   def helper(pw: PrintWriter) = new Showable {
     def show() = pw print helpText
