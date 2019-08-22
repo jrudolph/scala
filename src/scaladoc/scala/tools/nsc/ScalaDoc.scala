@@ -100,7 +100,7 @@ object ScalaDoc extends ScalaDoc {
 
   implicit class SummaryReporter(val rep: Reporter) extends AnyVal {
     /** Adds print lambda to ScalaDocReporter, executes it on other reporter */
-    private[this] def summaryMessage(pos: Position, msg: String, print: () => Unit): Unit = rep match {
+    def summaryMessage(pos: Position, msg: String, print: () => Unit): Unit = rep match {
       case r: ScalaDocReporter => r.addDelayedMessage(pos, msg, print)
       case _ => print()
     }

@@ -48,7 +48,7 @@ private[page] object JSONFormat {
          */
         case c if ((c >= '\u0000' && c <= '\u001f') || (c >= '\u007f' && c <= '\u009f')) =>
                      val cint = c.toInt
-                     buf ++= f"\\u$cint%04x"
+                     buf ++= s"\\u$cint%04x"
         case c    => buf += c
       }
       i += 1

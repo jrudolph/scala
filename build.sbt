@@ -485,7 +485,7 @@ lazy val compiler = configureAsSubproject(project)
       (products in Compile in packageBin).value ++
         Seq((dependencyClasspath in Compile).value.find(_.get(moduleID.key) == Some(asmDep)).get.data) ++
         (products in Compile in packageBin in LocalProject("interactive")).value ++
-        //(products in Compile in packageBin in LocalProject("scaladoc")).value ++
+        (products in Compile in packageBin in LocalProject("scaladoc")).value ++
         (products in Compile in packageBin in LocalProject("repl")).value ++
         (products in Compile in packageBin in LocalProject("repl-jline")).value ++
         (products in Compile in packageBin in LocalProject("repl-jline-embedded")).value,
