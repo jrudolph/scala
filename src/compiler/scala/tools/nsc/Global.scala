@@ -1047,7 +1047,7 @@ class Global(var currentSettings: Settings, reporter0: Reporter)
    */
   override def supplementTyperState(errorMessage: String): String = try {
     def formatExplain(pairs: List[(String, Any)]): String =
-      pairs collect { case (k, v) if v != null => f"$k%20s: $v" } mkString "\n"
+      pairs collect { case (k, v) if v != null => s"$k: $v" } mkString "\n"
 
     val tree      = analyzer.lastTreeToTyper
     val sym       = tree.symbol
@@ -1058,7 +1058,7 @@ class Global(var currentSettings: Settings, reporter0: Reporter)
       // Taking 3 before, 3 after the fingered line.
       val start = 0 max (tree.pos.line - 4)
       val xs = tree.pos.source.lines(start, start + 7)
-      val strs = xs.zipWithIndex map { case (line, idx) => f"${start + idx + 1}%6d $line" }
+      val strs = xs.zipWithIndex map { case (line, idx) => s"${start + idx + 1} $line" }
       strs.mkString("== Source file context for tree position ==\n\n", "\n", "")
     }
     catch { case t: Exception => devWarning("" + t) ; "<Cannot read source file>" }

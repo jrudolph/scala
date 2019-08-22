@@ -173,7 +173,7 @@ trait Checkable {
     def P3   = isNonRefinementClassType(P) && scrutConformsToPatternType(XR, P)
     def P4   = !(P1 || P2 || P3)
 
-    def summaryString = f"""
+    def summaryString = s"""
       |Checking checkability of (x: $X) against pattern $P
       |[P1] $P1%-6s X <: P             // $X  <: $P
       |[P2] $P2%-6s x ∉ P              // (x ∈ $X) ⇒ (x ∉ $P)

@@ -495,7 +495,7 @@ abstract class Mixin extends InfoTransform with ast.TreeDSL with AccessorSynthes
       */
     private def addNewDefs(clazz: Symbol, stats: List[Tree]): List[Tree] = {
       val accessorSynth = new UncheckedAccessorSynth(clazz)
-      import accessorSynth._
+      import accessorSynth.{clazz => _, _}
 
       // for all symbols `sym` in the class definition, which are mixed in by mixinTraitMembers
       for (sym <- clazz.info.decls ; if sym hasFlag MIXEDIN) {

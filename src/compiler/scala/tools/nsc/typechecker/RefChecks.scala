@@ -698,7 +698,7 @@ abstract class RefChecks extends Transform {
                   val cplIter = concrete.paramLists.iterator.flatten
                   def mismatch(apl: Symbol, cpl: Symbol): Option[(Type, Type)] =
                     if (apl.tpe =:= cpl.tpe) None else Some(apl.tpe -> cpl.tpe)
-                  
+
                   mapFilter2(aplIter, cplIter)(mismatch).take(2).toList match {
                     // Only one mismatched parameter: say something useful.
                     case (pa, pc) :: Nil  =>
@@ -1490,7 +1490,7 @@ abstract class RefChecks extends Transform {
           sym.setAnnotations(applyChecks(sym.annotations))
 
           def messageWarning(name: String)(warn: String) =
-            reporter.warning(tree.pos, f"Invalid $name message for ${sym}%s${sym.locationString}%s:%n$warn")
+            reporter.warning(tree.pos, s"Invalid $name message for ${sym}%s${sym.locationString}%s:%n$warn")
 
           // validate implicitNotFoundMessage and implicitAmbiguousMessage
           analyzer.ImplicitNotFoundMsg.check(sym) foreach messageWarning("implicitNotFound")

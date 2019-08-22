@@ -159,7 +159,7 @@ trait Errors extends Traces {
 
     def MacroImplTparamInstantiationError(atparams: List[Symbol], e: NoInstance) = {
       val badps = atparams map (_.defString) mkString ", "
-      compatibilityError(f"type parameters $badps cannot be instantiated%n${e.getMessage}")
+      compatibilityError(s"type parameters $badps cannot be instantiated%n${e.getMessage}")
     }
   }
 }

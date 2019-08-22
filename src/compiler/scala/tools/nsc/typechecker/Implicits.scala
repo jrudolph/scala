@@ -394,7 +394,7 @@ trait Implicits {
     val searchId = implicitSearchId()
     private def typingLog(what: String, msg: => String) = {
       if (printingOk(tree))
-        typingStack.printTyping(f"[search #$searchId] $what $msg")
+        typingStack.printTyping(s"[search #$searchId] $what $msg")
     }
 
     import infer._

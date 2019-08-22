@@ -92,7 +92,7 @@ object AbstractFile {
  *
  * ''Note:  This library is considered experimental and should not be used unless you know what you are doing.''
  */
-abstract class AbstractFile extends Iterable[AbstractFile] {
+abstract class AbstractFile /*extends Iterable[AbstractFile]*/ {
 
   /** Returns the name of this abstract file. */
   def name: String

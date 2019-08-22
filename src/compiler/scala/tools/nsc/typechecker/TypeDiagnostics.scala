@@ -710,8 +710,8 @@ trait TypeDiagnostics {
           opc.iterator.exists(pair => pair.low == m)
         }
         def isConvention(p: Symbol): Boolean = {
-          (p.name.decoded == "args" && p.owner.isMethod && p.owner.name.decoded == "main") ||
-            (p.tpe =:= typeOf[scala.Predef.DummyImplicit])
+          (p.name.decoded == "args" && p.owner.isMethod && p.owner.name.decoded == "main") /*||
+            (p.tpe =:= typeOf[scala.Predef.DummyImplicit])*/
         }
         def warningIsOnFor(s: Symbol) = if (s.isImplicit) settings.warnUnusedImplicits else settings.warnUnusedExplicits
         def warnable(s: Symbol) = (

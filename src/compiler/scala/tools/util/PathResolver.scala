@@ -296,7 +296,7 @@ final class PathResolver(settings: Settings, closeableRegistry: CloseableRegistr
   def result: ClassPath = {
     val cp = computeResult()
     if (settings.Ylogcp) {
-      Console print f"Classpath built from ${settings.toConciseString} %n"
+      Console print s"Classpath built from ${settings.toConciseString} %n"
       Console print s"Defaults: ${PathResolver.Defaults}"
       Console print s"Calculated: $Calculated"
 

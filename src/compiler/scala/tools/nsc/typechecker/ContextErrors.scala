@@ -603,7 +603,7 @@ trait ContextErrors {
           val suffix = if (missing.isEmpty) "" else {
             val keep = missing take 3 map (_.name)
             val ess  = if (missing.tail.isEmpty) "" else "s"
-            f".%nUnspecified value parameter$ess ${
+            s".%nUnspecified value parameter$ess ${
               keep.mkString("", ", ", if ((missing drop 3).nonEmpty) "..." else ".")
             }"
           }

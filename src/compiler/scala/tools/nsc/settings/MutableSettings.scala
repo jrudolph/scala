@@ -421,9 +421,9 @@ class MutableSettings(val errorFn: String => Unit)
     // Helper to generate a textual explanation of valid inputs
     private def getValidText: String = (min, max) match {
       case (IntMin, IntMax)   => "can be any integer"
-      case (IntMin, x)        => f"must be less than or equal to $x%d"
-      case (x, IntMax)        => f"must be greater than or equal to $x%d"
-      case _                  => f"must be between $min%d and $max%d"
+      case (IntMin, x)        => s"must be less than or equal to $x%d"
+      case (x, IntMax)        => s"must be greater than or equal to $x%d"
+      case _                  => s"must be between $min%d and $max%d"
     }
 
     // Ensure that the default value is actually valid
@@ -784,8 +784,8 @@ class MutableSettings(val errorFn: String => Unit)
         case Some("_" :: Nil) => Some("All choices are enabled by default." :: Nil)
         case _ => default
       }
-      val orelse = verboseDefault.map(_.mkString(f"%nDefault: ", ", ", f"%n")).getOrElse("")
-      choices.zipAll(descriptions, "", "").map(describe).mkString(f"${descr}%n", f"%n", orelse)
+      val orelse = verboseDefault.map(_.mkString(s"%nDefault: ", ", ", s"%n")).getOrElse("")
+      choices.zipAll(descriptions, "", "").map(describe).mkString(s"${descr}%n", s"%n", orelse)
     }
 
     def clear(): Unit         = {
@@ -865,7 +865,7 @@ class MutableSettings(val errorFn: String => Unit)
         case (choice, desc) => formatStr.format(choice, desc)
       }).mkString("")
     }
-    private def usageErrorMessage = f"Usage: $name:<$helpArg> where <$helpArg> choices are ${choices mkString ", "} (default: $default).%n$choicesHelpMessage"
+    private def usageErrorMessage = s"Usage: $name:<$helpArg> where <$helpArg> choices are ${choices mkString ", "} (default: $default).%n$choicesHelpMessage"
 
     private var sawHelp = false
     override def isHelping = sawHelp

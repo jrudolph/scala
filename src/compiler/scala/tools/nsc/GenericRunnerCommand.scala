@@ -69,7 +69,7 @@ s"""|Usage: $cmdName <options> [<script|class|object|jar> <arguments>]
     |All options to $compCmdName (see $compCmdName -help) are also allowed.
 """.stripMargin
 
-  override def usageMsg = f"""$shortUsageMsg
+  override def usageMsg = s"""$shortUsageMsg
 The first argument to $cmdName after the options designates what to run.
 
 If no argument is given, the Scala REPL, an interactive shell, is started.

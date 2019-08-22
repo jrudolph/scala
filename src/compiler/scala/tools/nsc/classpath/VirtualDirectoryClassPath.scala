@@ -28,7 +28,7 @@ case class VirtualDirectoryClassPath(dir: VirtualDirectory) extends ClassPath wi
     Option(AbstractFileClassLoader.lookupPath(dir)(packageDirName.split('/'), directory = true))
   protected def listChildren(dir: AbstractFile, filter: Option[AbstractFile => Boolean] = None): Array[F] = filter match {
     case Some(f) => dir.iterator.filter(f).toArray
-    case _ => dir.toArray
+    case _ => dir.iterator.toArray
   }
   def getName(f: AbstractFile): String = f.name
   def toAbstractFile(f: AbstractFile): AbstractFile = f

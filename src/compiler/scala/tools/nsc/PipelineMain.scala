@@ -140,7 +140,7 @@ class PipelineMainClass(argFiles: Seq[Path], pipelineSettings: PipelineMain.Pipe
           strippedAndExportedClassPath(entry) = extracted
         }
         exportTimer.stop()
-        reporter.echo(f"Exported external classpath in ${exportTimer.durationMs}%.0f ms")
+        reporter.echo(s"Exported external classpath in ${exportTimer.durationMs}%.0f ms")
       }
     }
 
@@ -232,9 +232,9 @@ class PipelineMainClass(argFiles: Seq[Path], pipelineSettings: PipelineMain.Pipe
 
         if (parallelism == 1) {
           val criticalPath = projects.maxBy(_.regularCriticalPathMs)
-          reporter.echo(f"Critical path: ${criticalPath.regularCriticalPathMs}%.0f ms. Wall Clock: ${timer.durationMs}%.0f ms")
+          reporter.echo(s"Critical path: ${criticalPath.regularCriticalPathMs}%.0f ms. Wall Clock: ${timer.durationMs}%.0f ms")
         } else
-          reporter.echo(f" Wall Clock: ${timer.durationMs}%.0f ms")
+          reporter.echo(s" Wall Clock: ${timer.durationMs}%.0f ms")
       case Pipeline =>
         projects.foreach { p =>
           val depsReady = Future.traverse(dependsOn.getOrElse(p, Nil))(task => p.dependencyReadyFuture(task))
@@ -271,9 +271,9 @@ class PipelineMainClass(argFiles: Seq[Path], pipelineSettings: PipelineMain.Pipe
 
         if (parallelism == 1) {
           val criticalPath = projects.maxBy(_.regularCriticalPathMs)
-          reporter.echo(f"Critical path: ${criticalPath.regularCriticalPathMs}%.0f ms. Wall Clock: ${timer.durationMs}%.0f ms")
+          reporter.echo(s"Critical path: ${criticalPath.regularCriticalPathMs}%.0f ms. Wall Clock: ${timer.durationMs}%.0f ms")
         } else
-          reporter.echo(f" Wall Clock: ${timer.durationMs}%.0f ms")
+          reporter.echo(s" Wall Clock: ${timer.durationMs}%.0f ms")
       case Traditional =>
         projects.foreach { p =>
           val f1 = Future.traverse(dependsOn.getOrElse(p, Nil))(_.t.javaDone.future)
@@ -296,9 +296,9 @@ class PipelineMainClass(argFiles: Seq[Path], pipelineSettings: PipelineMain.Pipe
         }
         if (parallelism == 1) {
           val maxFullCriticalPath: Double = projects.map(_.fullCriticalPathMs).max
-          reporter.echo(f"Critical path: $maxFullCriticalPath%.0f ms. Wall Clock: ${timer.durationMs}%.0f ms")
+          reporter.echo(s"Critical path: $maxFullCriticalPath%.0f ms. Wall Clock: ${timer.durationMs}%.0f ms")
         } else {
-          reporter.echo(f"Wall Clock: ${timer.durationMs}%.0f ms")
+          reporter.echo(s"Wall Clock: ${timer.durationMs}%.0f ms")
         }
     }
 
@@ -449,13 +449,13 @@ class PipelineMainClass(argFiles: Seq[Path], pipelineSettings: PipelineMain.Pipe
         val run1 = new compiler.Run()
         run1 compile files
         outlineTimer.stop()
-        log(f"scalac outline: done ${outlineTimer.durationMs}%.0f ms")
+        log(s"scalac outline: done ${outlineTimer.durationMs}%.0f ms")
         reporter.finish()
         if (reporter.hasErrors) {
           log("scalac outline: failed")
           outlineDone.complete(Failure(new RuntimeException(label + ": compile failed: ")))
         } else {
-          log(f"scalac outline: done ${outlineTimer.durationMs}%.0f ms")
+          log(s"scalac outline: done ${outlineTimer.durationMs}%.0f ms")
           outlineDone.complete(Success(()))
         }
       } catch {
@@ -485,7 +485,7 @@ class PipelineMainClass(argFiles: Seq[Path], pipelineSettings: PipelineMain.Pipe
                 compiler2.reporter.finish()
               } finally {
                 group.timer.stop()
-                log(f"scalac (${ix + 1}/$groupCount): done ${group.timer.durationMs}%.0f ms")
+                log(s"scalac (${ix + 1}/$groupCount): done ${group.timer.durationMs}%.0f ms")
               }
               if (compiler2.reporter.hasErrors) {
                 group.done.complete(Failure(new RuntimeException(label + ": compile failed: ")))
@@ -511,7 +511,7 @@ class PipelineMainClass(argFiles: Seq[Path], pipelineSettings: PipelineMain.Pipe
           override def advancePhase(): Unit = {
             if (compiler.phase == this.picklerPhase) {
               outlineTimer.stop()
-              log(f"scalac outline: done ${outlineTimer.durationMs}%.0f ms")
+              log(s"scalac outline: done ${outlineTimer.durationMs}%.0f ms")
               outlineDone.complete(Success(()))
               group.timer.start()
             }
@@ -528,7 +528,7 @@ class PipelineMainClass(argFiles: Seq[Path], pipelineSettings: PipelineMain.Pipe
             outlineDone.complete(Failure(new RuntimeException(label + ": compile failed: ")))
           group.done.complete(Failure(new RuntimeException(label + ": compile failed: ")))
         } else {
-          log(f"scalac: done ${group.timer.durationMs}%.0f ms")
+          log(s"scalac: done ${group.timer.durationMs}%.0f ms")
           //        outlineDone.complete(Success(()))
           group.done.complete(Success(()))
         }
@@ -572,10 +572,10 @@ class PipelineMainClass(argFiles: Seq[Path], pipelineSettings: PipelineMain.Pipe
           compileTask.setProcessors(Collections.emptyList())
           if (compileTask.call()) {
             javaTimer.stop()
-            log(f"javac: done ${javaTimer.durationMs}%.0f ms ")
+            log(s"javac: done ${javaTimer.durationMs}%.0f ms ")
           } else {
             javaTimer.stop()
-            log(f"javac: error ${javaTimer.durationMs}%.0f ms ")
+            log(s"javac: error ${javaTimer.durationMs}%.0f ms ")
           }
           ()
         })

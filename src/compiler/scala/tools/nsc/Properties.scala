@@ -33,7 +33,7 @@ object Properties extends scala.util.PropertiesTrait {
 
   // message to display at EOF (which by default ends with
   // a newline so as not to break the user's terminal)
-  def shellInterruptedString = scalaPropOrElse("shell.interrupted", f":quit$lineSeparator")
+  def shellInterruptedString = scalaPropOrElse("shell.interrupted", s":quit$lineSeparator")
 
   // derived values
   @deprecated("Emacs support is fully handled by JLine, this will be removed in next release", "2.12.6")

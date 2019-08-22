@@ -45,7 +45,7 @@ trait AbsSettings extends scala.reflect.internal.settings.AbsSettings {
   override def toString() = {
     val uss    = userSetSettings
     val indent = if (uss.nonEmpty) " " * 2 else ""
-    uss.mkString(f"Settings {%n$indent", f"%n$indent", f"%n}%n")
+    uss.mkString(s"Settings {%n$indent", s"%n$indent", s"%n}%n")
   }
   def toConciseString = userSetSettings.mkString("(", " ", ")")
 

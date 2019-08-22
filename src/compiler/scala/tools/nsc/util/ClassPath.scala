@@ -142,7 +142,7 @@ object ClassPath {
   def expandDir(extdir: String): List[String] = {
     AbstractFile getDirectory extdir match {
       case null => Nil
-      case dir  => dir.filter(_.isClassContainer).map(x => new java.io.File(dir.file, x.name).getPath).toList
+      case dir  => dir.iterator.filter(_.isClassContainer).map(x => new java.io.File(dir.file, x.name).getPath).toList
     }
   }
 
